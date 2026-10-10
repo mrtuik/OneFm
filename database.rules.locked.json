@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "stories": {
+      ".read": true,
+      "$id": { ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid)" }
+    },
+    "posts": {
+      ".read": true,
+      "$id": { ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid)" }
+    },
+    "users": {
+      "$uid": { ".read": true, ".write": "auth != null && auth.uid === $uid" }
+    },
+    "reports": { ".read": false, ".write": "auth != null" },
+    "config": { ".read": true, ".write": false }
+  }
+}

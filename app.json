@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "One Fm",
+    "slug": "onefm",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0B10",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.onefm.tuik",
+      "googleServicesFile": "./google-services.json",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-google-signin/google-signin",
+      "./plugins/withReleaseSigning"
+    ]
+  }
+}

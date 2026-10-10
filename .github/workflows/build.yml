@@ -1,0 +1,38 @@
+name: Build APK
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: npm ci
+      - name: Write google-services.json
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" | base64 -d > google-services.json
+      - run: npm run typecheck
+      - run: npx expo prebuild --platform android --no-install
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > $RUNNER_TEMP/release.keystore
+      - name: Gradle assembleRelease
+        working-directory: android
+        env:
+          ONEFM_KEYSTORE: ${{ runner.temp }}/release.keystore
+          ONEFM_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ONEFM_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          ONEFM_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: android/app/build/outputs/apk/release/*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onefm-apk
+          path: android/app/build/outputs/apk/release/*.apk

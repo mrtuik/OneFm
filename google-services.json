@@ -1,0 +1,69 @@
+{
+  "project_info": {
+    "project_number": "254854939387",
+    "firebase_url": "https://onefmtuik-default-rtdb.firebaseio.com",
+    "project_id": "onefmtuik",
+    "storage_bucket": "onefmtuik.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254854939387:android:d43ff998d2c4bc2a10a65e",
+        "android_client_info": {
+          "package_name": "com.onefm.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "254854939387-qng634gkqpamdo7u5lb1eu07m4k5hshs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApZg8OQpd2XDyPq8-GY2UmGWbOmVEx5KQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "254854939387-qng634gkqpamdo7u5lb1eu07m4k5hshs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254854939387:android:a7535101f92f061210a65e",
+        "android_client_info": {
+          "package_name": "com.onefm.tuik"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "254854939387-qng634gkqpamdo7u5lb1eu07m4k5hshs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApZg8OQpd2XDyPq8-GY2UmGWbOmVEx5KQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "254854939387-qng634gkqpamdo7u5lb1eu07m4k5hshs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
