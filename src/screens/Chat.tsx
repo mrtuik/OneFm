@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
@@ -16,29 +16,26 @@ import { deleteChat, loadChat, newChat, saveChat } from '../chat/store';
 import { TurnOptions, takeTurn } from '../chat/engine';
 import { YOU, isYou, playableRoles } from '../chat/roles';
 import { cleanSpeech } from '../format';
+import { UiText, uiText } from '../chat/uiText';
 import { isVoiceReady, speak, stopSpeaking } from '../voice/engine';
 import { incrementPlay } from '../firebase/db';
 
 const FONT = { small: 14, medium: 16, large: 18 } as const;
-const roleLabel = (role?: string) => (isYou(role) ? 'You' : role!);
+const roleLabel = (role: string | undefined, t: UiText) => (isYou(role) ? t.you : role!);
 
 /**
- * Lifts the screen above the keyboard by hand. KeyboardAvoidingView left a gap under the composer
- * after the keyboard closed. This hook only adds space while the keyboard is open, and adds none when
- * Android already resized the window itself.
+ * True while the keyboard is open. KeyboardAvoidingView is switched on only then, so it can never leave
+ * an empty gap under the composer after the keyboard closes. While it is open it measures the real overlap,
+ * so the composer is never hidden behind the keyboard.
  */
-function useKeyboardLift() {
-  const [kb, setKb] = useState(0);
-  const [winH, setWinH] = useState(0);
-  const baseH = useRef(0);
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (e) => setKb(e.endCoordinates?.height ?? 0));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKb(0));
+    const show = Keyboard.addListener('keyboardDidShow', () => setOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setOpen(false));
     return () => { show.remove(); hide.remove(); };
   }, []);
-  const onLayout = (h: number) => { baseH.current = Math.max(baseH.current, h); setWinH(h); };
-  const resized = kb > 0 && winH > 0 && winH < baseH.current - 40;
-  return { kbOpen: kb > 0, lift: kb > 0 && !resized ? kb : 0, onLayout };
+  return open;
 }
 
 function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
@@ -65,12 +62,12 @@ function SheetItem({ icon, label, onPress, danger, disabled }: { icon: React.Com
 }
 
 /** Choose the one role you play. The AI plays everybody else. Only roles that fit your gender are listed. */
-function RolePicker({ story, gender, onGender, current, onPick }: { story: Story; gender: Gender | null; onGender: (g: Gender) => void; current?: string; onPick: (role: string) => void }) {
+function RolePicker({ story, t, gender, onGender, current, onPick }: { story: Story; t: UiText; gender: Gender | null; onGender: (g: Gender) => void; current?: string; onPick: (role: string) => void }) {
   const roles = playableRoles(story, gender);
   return (
     <View style={{ gap: space.gap }}>
-      <Text style={s2.pickTitle}>Who do you want to play?</Text>
-      <Text style={s2.pickHint}>You play one role. Everyone else is played by the story.</Text>
+      <Text style={s2.pickTitle}>{t.pickTitle}</Text>
+      <Text style={s2.pickHint}>{t.pickHint}</Text>
 
       <View style={s2.genderRow}>
         {(['male', 'female'] as Gender[]).map((g) => (
@@ -80,11 +77,11 @@ function RolePicker({ story, gender, onGender, current, onPick }: { story: Story
         ))}
       </View>
 
-      {!gender ? <Text style={s2.pickHint}>Choose Male or Female first. You can change it later in Profile.</Text> : roles.map((r) => (
+      {!gender ? <Text style={s2.pickHint}>{t.pickGenderFirst}</Text> : roles.map((r) => (
         <Pressable key={r.name} onPress={() => onPick(r.name)} style={[s2.roleCard, current === r.name && s2.roleCardOn]}>
           <View style={s2.roleDot}><Text style={s2.roleInitial}>{r.name.charAt(0).toUpperCase()}</Text></View>
           <View style={{ flex: 1 }}>
-            <Text style={s2.roleName}>{r.name === YOU ? 'You (main character)' : r.name}</Text>
+            <Text style={s2.roleName}>{r.name === YOU ? t.youMain : r.name}</Text>
             <Text style={s2.roleDesc} numberOfLines={2}>{r.role}</Text>
           </View>
           <Ionicons name={current === r.name ? 'checkmark-circle' : 'chevron-forward'} size={20} color={current === r.name ? colors.accent : colors.sub} />
@@ -99,7 +96,8 @@ export default function Chat() {
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { s, update } = useSettings();
-  const { kbOpen, lift, onLayout } = useKeyboardLift();
+  const kbOpen = useKeyboardOpen();
+  const t = uiText(story.language);
 
   const [chat, setChat] = useState<ChatState | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -206,9 +204,9 @@ export default function Chat() {
 
   const nextEpisode = () => {
     if (busy) return;
-    Alert.alert('Go to the next episode?', 'This episode ends now with a closing scene.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Next episode', onPress: () => { stopSpeaking(); run({ closeEpisode: true }); } },
+    Alert.alert(t.nextEpTitle, t.nextEpBody, [
+      { text: t.cancel, style: 'cancel' },
+      { text: t.nextEpisode, onPress: () => { stopSpeaking(); run({ closeEpisode: true }); } },
     ]);
   };
 
@@ -223,23 +221,23 @@ export default function Chat() {
   const onLongPress = (m: ChatMessage) => {
     const isLast = chat?.messages[chat.messages.length - 1]?.id === m.id;
     const buttons: { text: string; onPress: () => void; style?: 'destructive' }[] = [
-      { text: 'Copy', onPress: () => Clipboard.setStringAsync(m.text) },
+      { text: t.copy, onPress: () => Clipboard.setStringAsync(m.text) },
     ];
-    if (m.role === 'ai' && isLast && !busy) buttons.push({ text: 'Regenerate', onPress: () => run({ regenerate: true }) });
-    buttons.push({ text: 'Delete', style: 'destructive', onPress: () => removeMessage(m) });
-    Alert.alert('Message', undefined, buttons, { cancelable: true });
+    if (m.role === 'ai' && isLast && !busy) buttons.push({ text: t.regenerate, onPress: () => run({ regenerate: true }) });
+    buttons.push({ text: t.delete, style: 'destructive', onPress: () => removeMessage(m) });
+    Alert.alert(t.message, undefined, buttons, { cancelable: true });
   };
 
-  const restart = () => Alert.alert('Restart this story?', 'Your messages and the story memory will be deleted from this phone.', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Restart', style: 'destructive', onPress: async () => { stopSpeaking(); await deleteChat(story.id); setBoth(newChat(story)); } },
+  const restart = () => Alert.alert(t.restartTitle, t.restartBody, [
+    { text: t.cancel, style: 'cancel' },
+    { text: t.restart, style: 'destructive', onPress: async () => { stopSpeaking(); await deleteChat(story.id); setBoth(newChat(story)); } },
   ]);
 
   const renderItem = ({ item }: { item: ChatMessage }) => {
     if (item.role === 'user') {
       return (
         <Pressable onLongPress={() => onLongPress(item)} style={s2.userCard}>
-          <Text style={s2.userLabel}>{roleLabel(chat?.userRole).toUpperCase()}</Text>
+          <Text style={s2.userLabel}>{roleLabel(chat?.userRole, t).toUpperCase()}</Text>
           <Text style={[s2.userText, { fontSize: font, lineHeight: font * 1.5 }]}>{item.text}</Text>
         </Pressable>
       );
@@ -265,15 +263,15 @@ export default function Chat() {
           <View style={s2.actions}>
             <Pressable onPress={() => { stopSpeaking(); run({ advance: true }); }} style={s2.actionBtn} accessibilityLabel="Next">
               <Ionicons name="play-forward" size={16} color={colors.text} />
-              <Text style={s2.actionText}>Next</Text>
+              <Text style={s2.actionText}>{t.next}</Text>
             </Pressable>
             <Pressable onPress={() => { stopSpeaking(); run({ regenerate: true }); }} style={s2.actionBtn} accessibilityLabel="Regenerate">
               <Ionicons name="refresh" size={16} color={colors.text} />
-              <Text style={s2.actionText}>Retry</Text>
+              <Text style={s2.actionText}>{t.retry}</Text>
             </Pressable>
             <Pressable onPress={nextEpisode} style={s2.actionBtn} accessibilityLabel="Next episode">
               <Ionicons name="play-skip-forward" size={16} color={colors.text} />
-              <Text style={s2.actionText}>Next episode</Text>
+              <Text style={s2.actionText}>{t.nextEpisode}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -283,14 +281,14 @@ export default function Chat() {
 
   const choices = !busy && last?.role === 'ai' ? last.choices ?? [] : [];
   const myRole = chat?.userRole;
-  const myName = roleLabel(myRole);
+  const myName = roleLabel(myRole, t);
   const initial = myName.charAt(0).toUpperCase();
   const canSend = canType && !!input.trim();
   // Space under the composer: clear of the system bar when the keyboard is closed, small when it is open.
-  const bottomPad = kbOpen ? 10 : insets.bottom + 8;
+  const bottomPad = kbOpen ? 10 : insets.bottom + 24;
 
   return (
-    <View style={[s2.root, { paddingTop: insets.top, paddingBottom: lift }]} onLayout={(e) => onLayout(e.nativeEvent.layout.height)}>
+    <KeyboardAvoidingView style={[s2.root, { paddingTop: insets.top }]} behavior="padding" enabled={kbOpen}>
       <View style={s2.header}>
         <View style={s2.headLeft}>
           <Pressable onPress={() => nav.goBack()} hitSlop={10} style={s2.iconBtn} accessibilityLabel="Back"><Ionicons name="arrow-back" size={22} color={colors.text} /></Pressable>
@@ -298,7 +296,7 @@ export default function Chat() {
         </View>
         <View style={s2.titleBox}>
           <Text style={s2.title} numberOfLines={1}>{story.title}</Text>
-          <Text style={s2.subtitle} numberOfLines={1}>{busy ? 'Writing...' : myRole ? `You are ${isYou(myRole) ? 'the main character' : myRole}` : 'Choose your role'}</Text>
+          <Text style={s2.subtitle} numberOfLines={1}>{busy ? t.writing : needRole ? t.chooseRole : isYou(myRole) ? t.youAreMain : t.youAre(myRole!)}</Text>
         </View>
         <View style={s2.headRight}><View style={s2.epPill}><Text style={s2.epText}>Ep: {chat?.ep ?? 1}</Text></View></View>
       </View>
@@ -312,8 +310,8 @@ export default function Chat() {
               <GradientButton title="Open Profile" onPress={() => nav.navigate('Profile')} />
             </View>
           ) : null}
-          <RolePicker story={story} gender={s.gender} onGender={(g) => update({ gender: g })} current={myRole} onPick={pickRole} />
-          {pickerOpen ? <Pressable onPress={() => setPickerOpen(false)} style={s2.cancelPick}><Text style={s2.cancelPickText}>Cancel</Text></Pressable> : null}
+          <RolePicker story={story} t={t} gender={s.gender} onGender={(g) => update({ gender: g })} current={myRole} onPick={pickRole} />
+          {pickerOpen ? <Pressable onPress={() => setPickerOpen(false)} style={s2.cancelPick}><Text style={s2.cancelPickText}>{t.cancel}</Text></Pressable> : null}
         </ScrollView>
       ) : (
         <>
@@ -346,13 +344,13 @@ export default function Chat() {
             <View style={s2.errorBar}>
               <Ionicons name="alert-circle-outline" size={18} color={colors.accent} />
               <Text style={s2.errorText} numberOfLines={3}>{error}</Text>
-              <Pressable onPress={retry} hitSlop={8}><Text style={s2.retry}>Retry</Text></Pressable>
+              <Pressable onPress={retry} hitSlop={8}><Text style={s2.retry}>{t.retry}</Text></Pressable>
             </View>
           ) : null}
 
           {waitingNext && !busy ? (
             <View style={{ paddingHorizontal: space.screen, paddingTop: 8, paddingBottom: bottomPad }}>
-              <GradientButton title={`Start Episode ${(last?.ep ?? 0) + 1}`} onPress={startNext} />
+              <GradientButton title={t.startEpisode((last?.ep ?? 0) + 1)} onPress={startNext} />
             </View>
           ) : (
             <View style={[s2.dock, { paddingBottom: bottomPad }]}>
@@ -369,7 +367,7 @@ export default function Chat() {
                 <TextInput
                   ref={inputRef}
                   style={s2.input}
-                  placeholder={hasKey === false ? 'Add your AI key in Profile to start' : isYou(myRole) ? 'Say something...' : `Say something as ${myName}`}
+                  placeholder={hasKey === false ? 'Add your AI key in Profile to start' : isYou(myRole) ? t.saySomething : t.sayAs(myName)}
                   placeholderTextColor={colors.sub}
                   value={input}
                   onChangeText={setInput}
@@ -399,13 +397,13 @@ export default function Chat() {
         </>
       )}
 
-      <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Chat options">
-        <SheetItem icon="volume-mute-outline" label="Stop voice" onPress={() => { setMenuOpen(false); stopSpeaking(); }} />
-        <SheetItem icon="person-outline" label="Change my role" onPress={() => { setMenuOpen(false); setPickerOpen(true); }} />
-        <SheetItem icon="play-skip-forward-outline" label="Next episode" disabled={busy || empty || waitingNext} onPress={() => { setMenuOpen(false); nextEpisode(); }} />
-        <SheetItem icon="refresh-outline" label="Restart story" danger onPress={() => { setMenuOpen(false); restart(); }} />
+      <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={t.menuTitle}>
+        <SheetItem icon="volume-mute-outline" label={t.stopVoice} onPress={() => { setMenuOpen(false); stopSpeaking(); }} />
+        <SheetItem icon="person-outline" label={t.changeRole} onPress={() => { setMenuOpen(false); setPickerOpen(true); }} />
+        <SheetItem icon="play-skip-forward-outline" label={t.nextEpisode} disabled={busy || empty || waitingNext} onPress={() => { setMenuOpen(false); nextEpisode(); }} />
+        <SheetItem icon="refresh-outline" label={t.restart} danger onPress={() => { setMenuOpen(false); restart(); }} />
       </Sheet>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

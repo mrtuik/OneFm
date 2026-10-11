@@ -8,6 +8,12 @@ export const DEFAULT_MESSAGE_LIMIT = 40;
 export const MIN_EPISODE_MESSAGES = 6;
 const HISTORY_LIMIT = 14;
 
+const LANG_NOTE: Record<Lang, string> = {
+  en: 'Write narration, dialogue and choices in simple English.',
+  hi: 'Write narration, dialogue and choices in Hinglish (Hindi in English letters). Not a single English sentence.',
+  bn: 'Write narration, dialogue and choices in Banglish (Bangla in English letters). Not a single English sentence.',
+};
+
 const LANGUAGE_RULE: Record<Lang, string> = {
   en: 'Language: natural, simple Indian English for narration and dialogue. speech_text is the same text in plain English.',
   bn: 'Language: Banglish, which is Bangla written in English letters, the way people text. The narration is Banglish too, never English sentences. display_text must be in English letters only. speech_text must be the same content written in Bengali script (বাংলা) so a voice can read it correctly.',
@@ -55,13 +61,13 @@ export function masterPrompt(lang: Lang): string {
 - If the user seems genuinely distressed (not role-playing), step out of the story briefly, respond kindly, and suggest talking to someone they trust.
 
 # LANGUAGE
-${LANGUAGE_RULE[lang]} Match the user's language and script.
+${LANGUAGE_RULE[lang]} Everything the reader sees (narration, dialogue and choices) uses this language, even if earlier replies in the history used another language. Match the user's language and script.
 
 # OUTPUT FORMAT
 Reply with ONE JSON object and nothing else, no markdown fences:
 {"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false}
 - speech_text: the same content as display_text in the same order, without asterisks, quotation marks, speaker labels (no "Name:"), brackets, emoji or any symbol, written so it sounds natural when read aloud. Only plain words with commas and full stops.
-- choices: 0 to 3 short ideas for what the user could do or say next. Use [] when not needed.`;
+- choices: 0 to 3 short ideas for what the user's role could say or do next, written from the user's own point of view, in the SAME language and script as display_text (Hinglish or Banglish, never English unless the story language is English). Example: "Usse puchho woh kya sawal hai". Use [] when not needed.`;
 }
 
 function characterCard(c: Character): string {
@@ -165,6 +171,7 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
       ? 'Begin episode 1 now. Set the scene and introduce the first character. Do not wait for the user.'
       : `Begin episode ${chat.ep} now. Open directly from the suspense hook the previous episode ended on.`);
   }
+  notes.push(LANG_NOTE[story.language]);
   if (mode === 'advance') notes.push('The user tapped Next without writing anything. Continue the scene with the next story beat: the other characters act and speak, the plot moves one step. Write nothing for the user\'s role.');
   if (mode === 'close') notes.push('This episode must end now (the message limit is reached or the user chose the next episode). Write the closing beat, end on a suspense hook, and set episode_complete to true.');
 

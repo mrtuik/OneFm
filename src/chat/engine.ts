@@ -4,6 +4,7 @@ import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, bui
 import { runMemoryPipeline } from '../ai/memory';
 import { saveChat } from './store';
 import { cleanSpeech } from '../format';
+import { uiText } from './uiText';
 
 export interface TurnOptions {
   /** A new message from the user. */
@@ -100,7 +101,7 @@ export async function takeTurn(story: Story, start: ChatState, opts: TurnOptions
 
   // Episode over: write the end card first so the user sees it, then update memory in the background of this call.
   const finishedEp = chat.ep;
-  const endCard: ChatMessage = { id: mid(), role: 'episode_end', text: `Episode ${finishedEp} complete`, ep: finishedEp, createdAt: Date.now() };
+  const endCard: ChatMessage = { id: mid(), role: 'episode_end', text: uiText(story.language).episodeDone(finishedEp), ep: finishedEp, createdAt: Date.now() };
   push({ ...chat, messages: [...chat.messages, endCard] });
 
   const withMemory = await runMemoryPipeline(cfg, key, story, chat, finishedEp);

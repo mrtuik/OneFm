@@ -1,5 +1,11 @@
 # One Fm changelog
 
+## V6.1
+- Keyboard: the composer is never hidden behind the keyboard again. KeyboardAvoidingView is back, but it is switched on only while the keyboard is open, so no gap stays when it closes. With the keyboard closed there is a small gap (24) above the system bar.
+- All chat screen words follow the story language: Hinglish for Hindi stories (Aage, Dobara, Agla episode, Kuch bolo..., role picker, menu, alerts, episode end card), Banglish for Bangla stories.
+- Suggestion chips are written by the AI in the story language (Hinglish or Banglish) from your role's point of view. Every turn also carries a language reminder, so narration stays Hinglish even when the old history was English. Restart the story once to clear old English replies.
+- Old chats (started before roles) now show "You are the main character" in the header instead of "Choose your role".
+
 ## V6
 - Roles: you play ONE role and the story plays everybody else (like Kavana). A new chat first asks "Who do you want to play?". The list has "You (main character)" and every character that fits your gender. Gender is set in Profile > I am (the picker also has Male / Female buttons). Tap your role chip in the composer, or menu > Change my role, to switch.
 - Story chat is now paragraph style like Kavana: several short paragraphs, narration in light gray italics, dialogue in white with the speaker name in bold, several characters can speak in one reply.
