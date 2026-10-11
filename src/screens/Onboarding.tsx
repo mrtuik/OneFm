@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Logo } from '../components/Logo';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
-import { colors, space } from '../theme';
+import { colors, radius, space } from '../theme';
 import { LANGS, LANG_LABEL, Lang, VOICES } from '../types';
 import { useSettings } from '../state/settings';
 import { emailSignIn, emailSignUp, friendlyAuthError, googleSignIn } from '../firebase/auth';
@@ -119,10 +119,10 @@ const s = StyleSheet.create({
   hero: { alignItems: 'center', marginTop: 40, marginBottom: 48, gap: 14 },
   brand: { color: colors.text, fontSize: 34, fontWeight: '800' },
   line: { color: colors.sub, fontSize: 15, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
-  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: space.card, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line },
-  box: { width: 24, height: 24, borderRadius: 7, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: space.card, borderRadius: radius.card, borderWidth: 1.5, borderColor: colors.line },
+  box: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   checkText: { color: colors.text, fontSize: 15, flex: 1, lineHeight: 21 },
-  input: { height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 16, color: colors.text, fontSize: 16 },
+  input: { height: 52, borderRadius: radius.btn, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 16, color: colors.text, fontSize: 16 },
   err: { color: colors.accent, fontSize: 13 },
   label: { color: colors.sub, fontSize: 13, fontWeight: '600' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

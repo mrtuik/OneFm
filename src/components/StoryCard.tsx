@@ -74,7 +74,7 @@ const s = StyleSheet.create({
   card: { borderRadius: radius.card, overflow: 'hidden', backgroundColor: colors.surface },
   cover: { width: '100%', alignItems: 'center', justifyContent: 'center' },
   badges: { position: 'absolute', top: 12, left: 12, right: 12, flexDirection: 'row', justifyContent: 'space-between' },
-  badge: { backgroundColor: colors.scrim, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  badge: { backgroundColor: colors.scrim, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.badge },
   badgeText: { color: colors.text, fontSize: 12, fontWeight: '700' },
   body: { padding: space.card, gap: 6 },
   heroTitle: { color: colors.text, fontSize: 22, fontWeight: '700' },
@@ -86,6 +86,6 @@ const s = StyleSheet.create({
   play: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   playOnCover: { position: 'absolute', right: 12, bottom: 12, width: 32, height: 32, borderRadius: 16 },
   rowCard: { flexDirection: 'row', padding: 12, gap: space.gap, alignItems: 'center' },
-  rowCover: { width: poster.rowSize, height: poster.rowSize, borderRadius: radius.chip, alignItems: 'center', justifyContent: 'center' },
+  rowCover: { width: poster.rowSize, height: poster.rowSize, borderRadius: radius.inner, alignItems: 'center', justifyContent: 'center' },
   rowBody: { flex: 1, gap: 4 },
 });

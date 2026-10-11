@@ -7,8 +7,8 @@ export type IconName = ComponentProps<typeof Ionicons>['name'];
 
 export function GradientButton({ title, onPress, disabled, style }: { title: string; onPress: () => void; disabled?: boolean; style?: ViewStyle }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [s.btn, { opacity: disabled ? 0.4 : pressed ? 0.85 : 1 }, style]}>
-      <Text style={s.btnText}>{title}</Text>
+    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [s.btn, disabled ? s.btnDisabled : { opacity: pressed ? 0.85 : 1 }, style]}>
+      <Text style={[s.btnText, disabled && { color: colors.sub }]}>{title}</Text>
     </Pressable>
   );
 }
@@ -41,17 +41,27 @@ export function Empty({ title, body, icon }: { title: string; body: string; icon
   );
 }
 
+export function BackButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={8} style={s.back} accessibilityRole="button" accessibilityLabel="Back">
+      <Ionicons name="arrow-back" size={22} color={colors.text} />
+    </Pressable>
+  );
+}
+
 export function Screen({ children }: { children: ReactNode }) {
   return <View style={{ flex: 1, backgroundColor: colors.bg }}>{children}</View>;
 }
 
 const s = StyleSheet.create({
   btn: { height: 52, borderRadius: radius.btn, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  btnDisabled: { backgroundColor: colors.surface },
   btnText: { color: colors.onAccent, fontSize: 16, fontWeight: '700' },
   outline: { height: 52, borderRadius: radius.btn, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
   outlineText: { color: colors.text, fontSize: 16, fontWeight: '600' },
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.chip, borderWidth: 1.5, borderColor: colors.line },
   chipText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.scrim, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
   emptyBody: { color: colors.sub, fontSize: 14, lineHeight: 20, textAlign: 'center' },

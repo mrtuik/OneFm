@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StoryCard } from '../components/StoryCard';
 import { Chip, Empty } from '../components/Ui';
-import { colors, space } from '../theme';
+import { colors, radius, space } from '../theme';
 import { GENRES, LANGS, LANG_LABEL, Lang, Story } from '../types';
 import { fetchStories } from '../firebase/db';
 
@@ -42,5 +42,5 @@ export default function Search() {
 }
 
 const s = StyleSheet.create({
-  input: { height: 48, borderRadius: 16, backgroundColor: colors.surface, paddingHorizontal: space.card, color: colors.text, fontSize: 16 },
+  input: { height: 48, borderRadius: radius.btn, backgroundColor: colors.surface, paddingHorizontal: space.card, color: colors.text, fontSize: 16 },
 });

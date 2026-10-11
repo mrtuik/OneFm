@@ -1,16 +1,18 @@
-// Palette: #2E2828 / #503A3A / #F65151 / #FEF4F4
+// Black theme. Accent and text colors come from the palette (#F65151, #FEF4F4).
 export const colors = {
-  bg: '#2E2828',
-  surface: '#503A3A',
+  bg: '#0A0A0A',
+  surface: '#171313',
   text: '#FEF4F4',
-  sub: '#C2AEAE',
+  sub: '#B5A8A8',
   accent: '#F65151',
-  onAccent: '#2E2828',
-  line: 'rgba(254,244,244,0.14)',
-  scrim: 'rgba(46,40,40,0.6)',
+  onAccent: '#1A0F0F',
+  line: 'rgba(254,244,244,0.12)',
+  scrim: 'rgba(10,10,10,0.6)',
   accentSoft: 'rgba(246,81,81,0.16)',
 };
-export const radius = { card: 16, chip: 12, btn: 14 };
+
+// Smaller, consistent corners. An inner element is always rounder-less than the card around it.
+export const radius = { card: 12, inner: 8, chip: 8, btn: 10, badge: 6 };
 
 // Shared spacing so every screen and card uses the same padding.
 export const space = { screen: 16, card: 16, gap: 12, section: 24 };

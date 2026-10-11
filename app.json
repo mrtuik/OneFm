@@ -5,7 +5,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#2E2828",
+    "backgroundColor": "#0A0A0A",
     "newArchEnabled": true,
     "android": {
       "package": "com.onefm.tuik",
@@ -13,7 +13,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2E2828"
+        "backgroundColor": "#0A0A0A"
       }
     },
     "plugins": [

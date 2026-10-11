@@ -15,6 +15,7 @@ import Profile from './screens/Profile';
 import { Chats, Community, Library } from './screens/Stubs';
 import { AppHeader } from './components/AppHeader';
 import { TabBar } from './components/TabBar';
+import { BackButton } from './components/Ui';
 import { colors } from './theme';
 import type { User } from './firebase/auth';
 
@@ -57,11 +58,21 @@ function Root() {
 
   return (
     <NavigationContainer theme={theme}>
-      <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.text, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.bg }, headerShadowVisible: false, headerTintColor: colors.text, contentStyle: { backgroundColor: colors.bg } }}>
         <Stack.Screen name="Tabs" options={{ headerShown: false }}>
           {() => <Tabs user={user} />}
         </Stack.Screen>
-        <Stack.Screen name="StoryDetail" component={StoryDetail} options={{ title: '', presentation: 'modal' }} />
+        <Stack.Screen
+          name="StoryDetail"
+          component={StoryDetail}
+          options={({ navigation }) => ({
+            title: '',
+            presentation: 'modal',
+            headerTransparent: true,
+            headerShadowVisible: false,
+            headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+          })}
+        />
         <Stack.Screen name="Profile" component={Profile} />
         <Stack.Screen name="Library" component={Library} />
       </Stack.Navigator>
