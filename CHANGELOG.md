@@ -1,5 +1,8 @@
 # One Fm changelog
 
+## V4.2
+- Build fix: the Gradle build failed in `configureCMakeRelWithDebInfo` because react-native-sherpa-onnx had not generated its codegen folder yet. The workflow now generates it first (step "Pre-generate sherpa-onnx codegen") and no longer sets `org.gradle.configureondemand`, which can break the task order of React Native libraries.
+
 ## V4.1
 - Fixed the TypeScript errors in StoryDetail (GradientView now accepts style arrays and StyleSheet.absoluteFill).
 - Build workflow now saves the Gradle log and prints the real error (CMake, Kotlin, Java) in the run Summary under "Real build error", so a native failure like configureCMake is readable.

@@ -91,8 +91,18 @@ jobs:
           {
             echo "org.gradle.parallel=true"
             echo "org.gradle.caching=true"
-            echo "org.gradle.configureondemand=true"
           } >> android/gradle.properties
+
+      # react-native-sherpa-onnx must have its codegen folder before the app's CMake step runs.
+      # Without this, CMake fails with: add_subdirectory ... react-native-sherpa-onnx/android/build/generated/source/codegen/jni/
+      # "which is not an existing directory". Generating it first fixes the ordering.
+      - name: Pre-generate sherpa-onnx codegen
+        working-directory: android
+        run: |
+          ./gradlew :react-native-sherpa-onnx:generateCodegenArtifactsFromSchema --build-cache \
+            || { echo "::warning::sherpa-onnx codegen task failed, see the list below"; ./gradlew :react-native-sherpa-onnx:tasks --all | grep -i codegen || true; }
+          D=../node_modules/react-native-sherpa-onnx/android/build/generated/source/codegen/jni
+          if [ -d "$D" ]; then echo "codegen jni folder OK:"; ls "$D" | head; else echo "::warning::codegen jni folder still missing"; fi
 
       # Optional. Without KEYSTORE_B64 the APK is signed with the standard debug key.
       - name: Decode release keystore (if provided)
