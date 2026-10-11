@@ -11,18 +11,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Runs first so a bad secret fails in seconds, not after 8 minutes.
-      - name: Write and validate google-services.json
+      # Uses the secret if you set one, otherwise the google-services.json committed in the repo.
+      - name: Validate google-services.json
         env:
           GS: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
         run: |
-          printf '%s' "$GS" > gs.raw
-          if node -e "JSON.parse(require('fs').readFileSync('gs.raw','utf8'))" 2>/dev/null; then
-            cp gs.raw google-services.json
-          else
-            tr -d ' \r\n' < gs.raw | base64 -d > google-services.json
+          if [ -n "$GS" ]; then
+            printf '%s' "$GS" > gs.raw
+            if node -e "JSON.parse(require('fs').readFileSync('gs.raw','utf8'))" 2>/dev/null; then
+              cp gs.raw google-services.json
+            else
+              tr -d ' \r\n' < gs.raw | base64 -d > google-services.json
+            fi
+            rm gs.raw
           fi
-          rm gs.raw
+          if [ ! -s google-services.json ]; then
+            echo "::error::google-services.json is missing. Commit it to the repo root."
+            exit 1
+          fi
           node -e "
             const j = JSON.parse(require('fs').readFileSync('google-services.json','utf8'));
             const ok = j.client.some(c => c.client_info.android_client_info.package_name === 'com.onefm.tuik');
@@ -64,14 +70,23 @@ jobs:
             echo "org.gradle.configureondemand=true"
           } >> android/gradle.properties
 
-      - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > $RUNNER_TEMP/release.keystore
+      # Optional. Without KEYSTORE_B64 the APK is signed with the standard debug key.
+      - name: Decode release keystore (if provided)
+        env:
+          KS: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            printf '%s' "$KS" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "ONEFM_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "Using release keystore"
+          else
+            echo "No KEYSTORE_B64 secret, using debug signing"
+          fi
 
       # arm64-v8a only: builds the native code once instead of four times.
       - name: Gradle assembleRelease
         working-directory: android
         env:
-          ONEFM_KEYSTORE: ${{ runner.temp }}/release.keystore
           ONEFM_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           ONEFM_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           ONEFM_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}

@@ -3,6 +3,5 @@ node_modules/
 android/
 ios/
 dist/
-google-services.json
 *.keystore
 *.jks

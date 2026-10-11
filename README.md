@@ -29,7 +29,8 @@ keytool -genkeypair -v -keystore onefm.keystore -alias onefm -keyalg RSA -keysiz
 base64 -w0 onefm.keystore            # KEYSTORE_B64
 base64 -w0 google-services.json      # GOOGLE_SERVICES_JSON_B64
 ```
-GitHub Secrets: `KEYSTORE_B64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, `GOOGLE_SERVICES_JSON_B64`.
+`google-services.json` repo te commit kora ache (eta secret noy, APK er bhetor e thake), tai `GOOGLE_SERVICES_JSON_B64` secret optional.
+Release signing er jonno optional GitHub Secrets: `KEYSTORE_B64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. Na dile APK debug key diye sign hoy.
 Tag push (`git tag v0.1.0 && git push --tags`) korle signed APK GitHub Release e jabe.
 
 ## Ki ache / ki nei
