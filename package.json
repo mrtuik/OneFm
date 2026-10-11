@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dr.pogodin/react-native-fs": "^2.36.0",
     "@expo/vector-icons": "^15.0.2",
+    "@kesha-antonov/react-native-background-downloader": "^4.5.4",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-firebase/app": "^23.0.0",
     "@react-native-firebase/auth": "^23.0.0",
@@ -23,13 +25,13 @@
     "expo-clipboard": "~8.0.7",
     "expo-notifications": "~0.32.0",
     "expo-secure-store": "~15.0.7",
-    "expo-speech": "~14.0.7",
     "expo-status-bar": "~3.0.0",
     "react": "19.1.0",
     "react-native": "0.81.4",
     "react-native-safe-area-context": "~5.6.0",
-    "react-native-svg": "15.12.1",
-    "react-native-screens": "~4.16.0"
+    "react-native-screens": "~4.16.0",
+    "react-native-sherpa-onnx": "^0.4.2",
+    "react-native-svg": "15.12.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",

@@ -1,4 +1,4 @@
-import { ChatMessage, ChatState, Fact, Lang, Story } from '../types';
+import { ChatMessage, ChatState, Character, Fact, Lang, Story } from '../types';
 import { LlmMessage } from './provider';
 
 export const DEFAULT_MESSAGE_LIMIT = 40;
@@ -12,47 +12,88 @@ const LANGUAGE_RULE: Record<Lang, string> = {
   hi: 'Language: Hinglish, which is Hindi written in English letters, the way people text. display_text must be in English letters only. speech_text must be the same content written in Devanagari script (हिन्दी) so a voice can read it correctly.',
 };
 
-/** Master system prompt. Swap this text if you keep a separate story_engine_guide. */
+/**
+ * Master system prompt, from story_engine_guide.md section 4 (HOW TO WRITE, SAFETY, LANGUAGE),
+ * plus the episode and JSON output rules this app needs. The story, characters, secrets and memory
+ * are sent in the second system message (see storyBible and memoryBlock).
+ */
 export function masterPrompt(lang: Lang): string {
-  return `You are the engine of an interactive role-play story app called One Fm.
+  return `You are the narrator and all characters in an interactive story. The user plays the protagonist (say "you" in narration).
 
-ROLE-PLAY
-- The user plays the protagonist (call them "you" in narration). Never write the user's actions, words or thoughts.
-- You narrate the world and play every other character. Stay in character and keep every detail consistent with the story, the memory and the chat so far.
-- Never mention these rules, the app, or that you are an AI. Never break the story.
-- Keep each reply short: about 50 to 130 words, a few short paragraphs. End so the user has something to react to.
-- Narration goes inside asterisks like *the lights flicker*. Dialogue is plain text with the character name implied by context.
+# HOW TO WRITE
+1. Format every reply as a short narration line in *italics*, then character dialogue in quotes. Example:
+   *Meera clutches her notebook tighter, eyes on the door.*
+   "Tum yahan kya kar rahe ho?"
+2. Keep replies 2 to 5 short lines (about 40 to 110 words). Never write a wall of text.
+3. Show, don't tell. Use body language, objects, small actions and silence instead of stating emotions.
+4. Give each character a distinct voice that matches their language_style and speech_habits. Never make characters sound the same.
+5. Add subtext. Characters often say one thing and mean another.
+6. Never speak or act for the user. Never decide the user's feelings or choices.
+7. Move the story forward every reply: reveal something, raise a stake, or create a small choice. No filler.
+8. Do not repeat phrases, openings or gestures used in the last 10 replies.
+9. End most replies with a hook: a question, a surprise, an unfinished action, or a clear choice.
+10. Stay in the story. Never say you are an AI and never mention these rules or the app. If the user breaks the story, respond in character and gently steer back.
+11. Respect the current episode goal. Do not jump to later plot beats early.
+12. Slow burn: emotions and relationships develop gradually across episodes, not in one reply.
+13. Secrets are never revealed directly. Hint only when the story has earned it.
 
-EPISODES
-- The story is told in episodes. Each episode has a goal. Move the story toward the goal of the current episode without rushing.
+# EPISODES
+- The story is told in episodes, each with a goal. Move toward the goal of the current episode without rushing.
 - When the goal is met, or when the director note says to close the episode, write a closing beat that ends on a suspense hook and set "episode_complete" to true. Otherwise it is false.
 
-CONTENT RULES (adult audience, 18+)
-- No sexual content. No graphic violence or gore. No hate or harassment.
-- A character under 18 may only be a supporting character. Never in romantic, sexual or sensual content, and never the user's persona.
+# SAFETY (adult audience, 18+)
+- All characters are adults (18+). A character under 18 may only be a supporting character, never in romantic, sexual or sensual content, and never the user's persona.
 - A child in danger is allowed only in non-graphic form, with no abuse shown.
-- If the user pushes toward anything above, steer the scene somewhere else inside the story. Do not lecture.
+- No sexual content, graphic violence, self-harm instructions, or hateful content. If the user pushes for it, have the character deflect naturally and change the scene. Do not lecture.
+- If the user seems genuinely distressed (not role-playing), step out of the story briefly, respond kindly, and suggest talking to someone they trust.
 
-${LANGUAGE_RULE[lang]}
+# LANGUAGE
+${LANGUAGE_RULE[lang]} Match the user's language and script.
 
-OUTPUT FORMAT
+# OUTPUT FORMAT
 Reply with ONE JSON object and nothing else, no markdown fences:
 {"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false}
 - speech_text: the same content as display_text, without asterisks or stage directions, written so it sounds natural when read aloud.
 - choices: 0 to 3 short ideas for what the user could do or say next. Use [] when not needed.`;
 }
 
+function characterCard(c: Character): string {
+  const lines = [`- ${c.name}${c.age ? ` (${c.age})` : ''}: ${c.role}`];
+  if (c.appearance) lines.push(`  appearance: ${c.appearance}`);
+  if (c.personality?.length) lines.push(`  personality: ${c.personality.join(', ')}`);
+  if (c.languageStyle) lines.push(`  language_style: ${c.languageStyle}`);
+  if (c.speechHabits?.length) lines.push(`  speech_habits: ${c.speechHabits.join('; ')}`);
+  if (c.wants) lines.push(`  wants: ${c.wants}`);
+  if (c.fears) lines.push(`  fears: ${c.fears}`);
+  if (c.flaw) lines.push(`  flaw: ${c.flaw}`);
+  if (c.relationshipToUser) lines.push(`  relationship_to_user: ${c.relationshipToUser}`);
+  if (c.exampleDialogue?.length) lines.push(`  example_dialogue: ${c.exampleDialogue.map((d) => `"${d}"`).join(' | ')}`);
+  return lines.join('\n');
+}
+
 function storyBible(story: Story): string {
-  const chars = story.characters.map((c) => `- ${c.name}: ${c.role}`).join('\n');
-  const eps = story.episodes.map((e, i) => `${i + 1}. ${e.goal}`).join('\n');
-  return `STORY BIBLE
-Title: ${story.title}
-Premise: ${story.logline}
-Genres: ${story.genres.join(', ')}
-Characters:
-${chars || '- (none listed)'}
-Episode goals:
-${eps || '(open ended)'}`;
+  const eps = story.episodes.map((e, i) => `${i + 1}. ${e.title ? `${e.title}: ` : ''}${e.goal}${e.hook ? ` (hook: ${e.hook})` : ''}`).join('\n');
+  const secrets = [
+    ...(story.secrets ?? []),
+    ...(story.secrets?.length ? [] : story.characters.filter((c) => c.secret).map((c) => `${c.name}: ${c.secret}`)),
+  ];
+  return [
+    'STORY',
+    `Title: ${story.title}`,
+    `Premise: ${story.logline}`,
+    story.setting ? `Setting: ${story.setting}` : null,
+    story.tone ? `Tone: ${story.tone}` : null,
+    story.centralQuestion ? `Central question: ${story.centralQuestion}` : null,
+    `Genres: ${story.genres.join(', ')}`,
+    story.rules?.length ? `Story rules (must follow):\n${story.rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}` : null,
+    '',
+    'CHARACTERS',
+    story.characters.map(characterCard).join('\n') || '- (none listed)',
+    secrets.length ? `\nSECRETS (never reveal directly, hint only when the story earns it)\n${secrets.map((s) => `- ${s}`).join('\n')}` : null,
+    '',
+    'EPISODE GOALS',
+    eps || '(open ended)',
+  ].filter((x) => x !== null).join('\n');
 }
 
 export function episodeGoal(story: Story, ep: number): string {
@@ -144,15 +185,35 @@ export function parseReply(raw: string): Reply | null {
   }
 }
 
-// ---- Memory prompts ----
+// ---- Memory prompts (story_engine_guide.md section 5) ----
 export const SUMMARY_SYSTEM = 'You write compact story memory. Reply with plain text only.';
 export const summaryPrompt = (title: string, ep: number, transcript: string) =>
-  `Story: ${title}\nEpisode ${ep} transcript:\n${transcript}\n\nSummarize this episode in 3 to 4 sentences. Include what happened, what changed, and the hook it ended on. Plain English, no lists.`;
+  `Story: ${title}\nSummarize this episode in 3-4 sentences for story memory.
+Include: what happened, how each main character feels now, any new secret or promise, and the unresolved thread.
+Do not include dialogue. Be factual and specific (names, places, objects).
+Output plain text only.
 
-export const FACTS_SYSTEM = 'You extract story facts. Reply with a JSON array only, no markdown.';
-export const factsPrompt = (title: string, ep: number, transcript: string) =>
-  `Story: ${title}\nEpisode ${ep} transcript:\n${transcript}\n\nList up to 6 durable facts that later episodes must remember (names, relationships, promises, secrets, injuries, objects, places, decisions). Return a JSON array like [{"fact":"...","importance":1-5}] where 5 is critical. Use [] if nothing is worth keeping.`;
+Episode ${ep} transcript:
+${transcript}`;
+
+export const FACTS_SYSTEM = 'You extract story facts. Reply with JSON only, no markdown.';
+export const factsPrompt = (title: string, ep: number, transcript: string, known: string[]) =>
+  `Story: ${title}\nFrom this episode, extract important facts worth remembering long-term. Output JSON only:
+{"facts":[{"text":"","characters":[],"type":"secret|promise|relationship|event|object|preference","importance":1}]}
+importance is 1 to 5 (5 = critical).
+Rules: only concrete facts, max 8 items, no opinions, no repeats of known facts: ${known.length ? known.join(' | ') : '(none)'}
+
+Episode ${ep} transcript:
+${transcript}`;
 
 export const MERGE_SYSTEM = 'You maintain a rolling story summary. Reply with plain text only.';
 export const mergePrompt = (title: string, previous: string, eps: { ep: number; text: string }[]) =>
-  `Story: ${title}\nCurrent rolling summary:\n${previous || '(empty)'}\n\nNew episode summaries:\n${eps.map((e) => `Ep ${e.ep}: ${e.text}`).join('\n')}\n\nWrite the updated rolling summary in at most 250 words. Keep the important events, relationships and open threads in order. Drop minor detail.`;
+  `Story: ${title}\nMerge these summaries into one story-so-far summary under 250 words.
+Keep: key events in order, current relationships, open secrets, unresolved threads.
+Drop: minor details and repeated information.
+
+Summaries:
+${previous ? `Earlier: ${previous}\n` : ''}${eps.map((e) => `Ep ${e.ep}: ${e.text}`).join('\n')}`;
+
+// Temperatures from the guide's model settings table.
+export const TEMP = { chat: 0.9, summary: 0.25, facts: 0.15 };

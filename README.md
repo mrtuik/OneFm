@@ -22,9 +22,14 @@ The master prompt lives in `src/ai/prompts.ts`.
 When an episode ends, the app summarizes it, extracts facts, and every 10 episodes merges the summaries into a rolling summary.
 Chats, summaries and facts stay on the phone (AsyncStorage). Code: `src/ai/memory.ts`, `src/chat/engine.ts`.
 
-## Voice (M4)
-`src/voice/engine.ts` is the only file that talks to a voice engine. It currently uses the text-to-speech voices installed on the phone (expo-speech).
-For Bangla or Hindi, install the voice in Android Settings > Text-to-speech. A sherpa-onnx engine can replace the functions in that file later.
+## Voice (M4, sherpa-onnx)
+`src/voice/engine.ts` is the only file that talks to the voice engine. It runs sherpa-onnx text-to-speech fully on the phone through the `react-native-sherpa-onnx` package. The phone's own text-to-speech voices are not used.
+- Voices are models from the sherpa-onnx `tts-models` release (list: `VOICES` in `engine.ts`). English: Piper Lessac and Ryan. Hindi: Piper Priyamvada, Pratham, Rohan. Bangla: Coqui female and Mimic3 multi voice.
+- Models are not bundled. Download one in Profile > Voice (or tap the "Download voice" chip in a chat). It is stored on the phone and works offline. Sizes are 64 to 103 MB, so use Wi-Fi.
+- Replies are streamed into the native PCM player sentence by sentence, so audio starts early. Only one message speaks at a time.
+- Bangla and Hindi voices read native script, so every AI reply carries `speech_text` (Bengali script or Devanagari) next to the Roman `display_text`.
+- Extra native packages (peers of the library): `@dr.pogodin/react-native-fs` and `@kesha-antonov/react-native-background-downloader`. They autolink during `expo prebuild`.
+- To add a voice, add one line to `VOICES` with the exact model id from https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models.
 
 ## Google Sign-In fix (must)
 `google-services.json` currently has only the web client (type 3) and no Android client (type 1), because no SHA-1 was added.
@@ -47,5 +52,5 @@ Optional GitHub secrets: `KEYSTORE_B64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_
 Pushing a tag (`git tag v0.1.0 && git push --tags`) uploads the signed APK to a GitHub Release.
 
 ## Status
-Done: 18+ gate, email, Google and guest login, language select, Home, Search, Pocket-style story page, like, Chats list, Chat with AI replies, provider settings, episode memory, voice chips, Profile.
+Done: 18+ gate, email, Google and guest login, language select, Home, Search, Pocket-style story page, like, Chats list, Chat with AI replies, provider settings, episode memory, voice chips with on-device sherpa-onnx voices, Profile.
 Next: Community (M5), Library and profile stats (M6), moderation (M7).

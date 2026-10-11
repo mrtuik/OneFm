@@ -1,5 +1,13 @@
 # One Fm changelog
 
+## V4
+- Voice: sherpa-onnx is now the voice engine (`react-native-sherpa-onnx`). Phone text-to-speech (expo-speech) is removed. English, Hindi and Bangla voices download on demand, work offline, and stream into a native PCM player. Voice chip shows Download, progress, loading and play states. Profile > Voice lists voices with Get, Preview, Remove and a selected voice per language.
+- Chat screen redesigned: Claude-style composer (text field on top, character chip and send button underneath), rounded card that gets a pink outline when focused, tap anywhere on it to type, keyboard opens by itself, field stays focused while the AI writes, keyboard-aware layout, safe bottom padding. AI messages have a small speaker avatar, your messages are outlined cards with a YOU label, episode end is a divider line, header shows who you are talking to.
+- Bottom nav: taller bar (72) with more space above the icons.
+- Search icon replaced with the Material twotone-search icon.
+- story_engine_guide.md applied: master prompt (12 writing rules, safety, language), story bible with setting, tone, central question, rules and secrets, full character cards, memory prompts (episode summary, fact extractor with type and importance, rolling summary under 250 words) and the guide's temperatures. The guide's "New Girl in College" story is added as a sample story.
+- New dependencies: react-native-sherpa-onnx, @dr.pogodin/react-native-fs, @kesha-antonov/react-native-background-downloader. Removed: expo-speech.
+
 ## V3
 - Story page rebuilt like the Pocket FM story page: gradient header, centered square poster with a plays ribbon, Like and Play Now buttons, stats row (plays, likes, episodes, rating), creator row, Episodes and Details tabs, Resume EP button, floating back and share buttons.
 - Accent color is now the Pocket FM pink (#E31A4E, sampled from the reference image) everywhere.

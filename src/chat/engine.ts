@@ -1,6 +1,6 @@
 import { ChatMessage, ChatState, Story } from '../types';
 import { ProviderError, ProviderSettings, chatCompletion } from '../ai/provider';
-import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TurnMode, buildTurnMessages, parseReply } from '../ai/prompts';
+import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, parseReply } from '../ai/prompts';
 import { runMemoryPipeline } from '../ai/memory';
 import { saveChat } from './store';
 
@@ -21,7 +21,7 @@ async function askModel(story: Story, chat: ChatState, finalUser: string, histor
   let lastRaw = '';
   // Structured reply. If parsing fails, retry once, then show the plain text.
   for (let attempt = 0; attempt < 2; attempt++) {
-    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 700, temperature: 0.85 });
+    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 700, temperature: TEMP.chat });
     const parsed = parseReply(lastRaw);
     if (parsed) return parsed;
   }

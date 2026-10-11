@@ -49,8 +49,8 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
 }
 
 const s = StyleSheet.create({
-  bar: { flexDirection: 'row', backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: 10 },
-  item: { flex: 1, alignItems: 'center', gap: 3 },
+  bar: { flexDirection: 'row', backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: 16 },
+  item: { flex: 1, alignItems: 'center', gap: 4 },
   iconBox: { height: 28, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 10, fontWeight: '600' },
   ring: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },

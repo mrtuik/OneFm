@@ -2,7 +2,22 @@ export type Lang = 'en' | 'bn' | 'hi';
 export const LANG_LABEL: Record<Lang, string> = { en: 'English', bn: 'Bangla', hi: 'Hindi' };
 export const LANGS: Lang[] = ['en', 'bn', 'hi'];
 
-export interface Character { name: string; role: string }
+/** Name and role are required. The other fields come from the story_engine_guide character card and are optional. */
+export interface Character {
+  name: string;
+  role: string;
+  age?: number;
+  appearance?: string;
+  personality?: string[];
+  languageStyle?: string;
+  speechHabits?: string[];
+  wants?: string;
+  fears?: string;
+  secret?: string;
+  flaw?: string;
+  relationshipToUser?: string;
+  exampleDialogue?: string[];
+}
 export interface Story {
   id: string;
   title: string;
@@ -11,7 +26,14 @@ export interface Story {
   genres: string[];
   language: Lang;
   characters: Character[];
-  episodes: { goal: string }[];
+  episodes: { goal: string; title?: string; scene?: string; hook?: string }[];
+  /** Story bible fields from the story_engine_guide. All optional. */
+  setting?: string;
+  tone?: string;
+  centralQuestion?: string;
+  rules?: string[];
+  secrets?: string[];
+  openingLine?: string;
   creatorName: string;
   likeCount: number;
   playCount: number;
@@ -37,7 +59,7 @@ export interface ChatMessage {
   ep: number;
   createdAt: number;
 }
-export interface Fact { text: string; importance: number; ep: number }
+export interface Fact { text: string; importance: number; ep: number; type?: string; characters?: string[] }
 export interface EpisodeSummary { ep: number; text: string }
 export interface ChatState {
   storyId: string;

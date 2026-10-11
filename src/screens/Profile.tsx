@@ -1,5 +1,6 @@
 import React, { ReactNode, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
 import { UserAvatar } from '../components/UserAvatar';
@@ -10,7 +11,8 @@ import { logout, useAuthUser } from '../firebase/auth';
 import { seedStories } from '../firebase/db';
 import { PRESETS, Preset, ProviderSettings, testConnection } from '../ai/provider';
 import { getApiKey, setApiKey } from '../ai/secure';
-import { VoiceInfo, listVoices, openVoiceSettings, speak, stopSpeaking } from '../voice/engine';
+import { VoiceInfo, downloadVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
+import { useVoiceStatus } from '../voice/useVoice';
 
 const SAMPLE: Record<Lang, string> = {
   en: 'Hello, this is how your story will sound.',
@@ -41,6 +43,46 @@ function Field({ label, ...p }: { label: string } & React.ComponentProps<typeof 
   );
 }
 
+
+function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; onUse: () => void; lang: Lang }) {
+  const st = useVoiceStatus(v.id);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => subscribePlaying((p) => setPlaying(p.id === 'preview:' + v.id)), [v.id]);
+  const ready = st.state === 'ready';
+  const confirmRemove = () => Alert.alert('Remove this voice?', `${v.name} will be deleted from this phone (${v.sizeMB} MB). You can download it again later.`, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Remove', style: 'destructive', onPress: () => removeVoice(v.id) },
+  ]);
+  return (
+    <View style={[s.voiceRow, chosen && { borderColor: colors.accent }]}>
+      <Pressable onPress={ready ? onUse : undefined} style={s.voiceMain} accessibilityRole="radio" accessibilityState={{ selected: chosen }}>
+        <Ionicons name={chosen ? 'radio-button-on' : 'radio-button-off'} size={20} color={chosen ? colors.accent : colors.sub} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.voiceName}>{v.name}</Text>
+          <Text style={s.hint}>
+            {st.state === 'downloading' ? `Downloading ${st.percent}%` : ready ? 'Ready, works offline' : st.error ? 'Download failed. Try again' : `${v.sizeMB} MB download`}
+          </Text>
+        </View>
+      </Pressable>
+      {st.state === 'downloading' ? <ActivityIndicator color={colors.accent} /> : ready ? (
+        <View style={s.voiceActions}>
+          <Pressable hitSlop={8} onPress={() => (playing ? stopSpeaking() : speak('preview:' + v.id, SAMPLE[lang], lang, v.id))} accessibilityLabel="Preview voice">
+            <Ionicons name={playing ? 'stop-circle-outline' : 'play-circle-outline'} size={28} color={colors.text} />
+          </Pressable>
+          <Pressable hitSlop={8} onPress={confirmRemove} accessibilityLabel="Remove voice">
+            <Ionicons name="trash-outline" size={22} color={colors.sub} />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable hitSlop={8} onPress={async () => { const ok = await downloadVoice(v.id); if (ok && !chosen) onUse(); }} style={s.dl} accessibilityLabel="Download voice">
+          <Ionicons name="download-outline" size={18} color={colors.accent} />
+          <Text style={s.dlText}>Get</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 export default function Profile() {
   const { s: st, update } = useSettings();
   const { user } = useAuthUser();
@@ -51,10 +93,9 @@ export default function Profile() {
   const [prov, setProv] = useState<ProviderSettings>(st.provider);
   const [key, setKey] = useState('');
   const [testing, setTesting] = useState(false);
-  const [voices, setVoices] = useState<VoiceInfo[] | null>(null);
 
   useEffect(() => { getApiKey().then(setKey); }, []);
-  useEffect(() => { setVoices(null); listVoices(lang).then(setVoices); return () => stopSpeaking(); }, [lang]);
+  useEffect(() => () => stopSpeaking(), [lang]);
 
   const name = user ? user.displayName ?? user.email ?? 'Reader' : 'Guest';
   const sub = user ? (user.displayName ? user.email : null) : 'Sign in to like, save and post.';
@@ -79,12 +120,12 @@ export default function Profile() {
 
   const seed = async () => {
     setBusy(true);
-    try { await seedStories(); Alert.alert('Done', '10 sample stories were written to the Realtime Database.'); }
+    try { await seedStories(); Alert.alert('Done', 'Sample stories were written to the Realtime Database.'); }
     catch (e: any) { Alert.alert('Seeding failed', String(e?.message ?? e)); }
     finally { setBusy(false); }
   };
 
-  const chosen = st.voices[lang];
+  const chosen = resolveVoice(lang, st.voices[lang]).id;
 
   return (
     <ScrollView
@@ -104,22 +145,12 @@ export default function Profile() {
         </View>
       </Section>
 
-      <Section title="Voice" hint={`Voices installed on this phone for ${LANG_LABEL[lang]}.`}>
-        {voices === null ? <Text style={s.hint}>Looking for voices...</Text> : (
-          <>
-            <View style={s.row}>
-              <Chip label="Device default" active={!chosen} onPress={() => update({ voices: { ...st.voices, [lang]: undefined } })} />
-              {voices.map((v) => <Chip key={v.id} label={v.name} active={chosen === v.id} onPress={() => update({ voices: { ...st.voices, [lang]: v.id } })} />)}
-            </View>
-            {voices.length === 0 && lang !== 'en' ? (
-              <Text style={s.hint}>No {LANG_LABEL[lang]} voice is installed. Install one in your phone's text-to-speech settings, then come back.</Text>
-            ) : null}
-            <View style={{ gap: 8 }}>
-              {(voices.length > 0 || lang === 'en') ? <OutlineButton icon="volume-high-outline" title="Preview voice" onPress={() => speak('preview', SAMPLE[lang], lang, chosen)} /> : null}
-              {lang !== 'en' && voices.length === 0 ? <OutlineButton icon="download-outline" title="Open voice settings" onPress={openVoiceSettings} /> : null}
-            </View>
-          </>
-        )}
+      <Section title="Voice" hint={`${LANG_LABEL[lang]} voices run on this phone with sherpa-onnx. Download one once, then it works offline.`}>
+        <View style={{ gap: 8 }}>
+          {voicesFor(lang).map((v) => (
+            <VoiceRow key={v.id} v={v} lang={lang} chosen={chosen === v.id} onUse={() => update({ voices: { ...st.voices, [lang]: v.id } })} />
+          ))}
+        </View>
         <View style={s.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={s.cardTitle}>Auto-play voice</Text>
@@ -175,5 +206,11 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, marginTop: 4 },
   fieldLabel: { color: colors.sub, fontSize: 13, fontWeight: '600' },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, padding: 12, borderRadius: radius.btn, borderWidth: 1.5, borderColor: colors.line },
+  voiceMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  voiceName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  voiceActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  dl: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.chip, borderWidth: 1.5, borderColor: colors.accent },
+  dlText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
   input: { height: 46, borderRadius: radius.btn, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, color: colors.text, fontSize: 15 },
 });

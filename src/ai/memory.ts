@@ -1,6 +1,6 @@
 import { ChatMessage, ChatState, Fact, Story } from '../types';
 import { chatCompletion, ProviderSettings } from './provider';
-import { FACTS_SYSTEM, MERGE_SYSTEM, SUMMARY_SYSTEM, factsPrompt, mergePrompt, summaryPrompt } from './prompts';
+import { FACTS_SYSTEM, MERGE_SYSTEM, SUMMARY_SYSTEM, TEMP, factsPrompt, mergePrompt, summaryPrompt } from './prompts';
 
 const MERGE_EVERY = 10; // episodes
 const MAX_FACTS = 200;
@@ -13,7 +13,7 @@ async function summarize(cfg: ProviderSettings, key: string, story: Story, ep: n
     const out = await chatCompletion({
       cfg, apiKey: key, model: cfg.summaryModel,
       messages: [{ role: 'system', content: SUMMARY_SYSTEM }, { role: 'user', content: summaryPrompt(story.title, ep, text) }],
-      maxTokens: 220, temperature: 0.3,
+      maxTokens: 300, temperature: TEMP.summary,
     });
     return out.trim();
   } catch {
@@ -21,21 +21,37 @@ async function summarize(cfg: ProviderSettings, key: string, story: Story, ep: n
   }
 }
 
-async function extractFacts(cfg: ProviderSettings, key: string, story: Story, ep: number, text: string): Promise<Fact[]> {
+async function extractFacts(cfg: ProviderSettings, key: string, story: Story, ep: number, text: string, known: Fact[]): Promise<Fact[]> {
   try {
     const out = await chatCompletion({
       cfg, apiKey: key, model: cfg.summaryModel,
-      messages: [{ role: 'system', content: FACTS_SYSTEM }, { role: 'user', content: factsPrompt(story.title, ep, text) }],
-      maxTokens: 400, temperature: 0.2,
+      messages: [{ role: 'system', content: FACTS_SYSTEM }, { role: 'user', content: factsPrompt(story.title, ep, text, known.slice(0, 40).map((f) => f.text)) }],
+      maxTokens: 600, temperature: TEMP.facts,
     });
-    const a = out.indexOf('[');
-    const b = out.lastIndexOf(']');
-    if (a < 0 || b <= a) return [];
-    const arr = JSON.parse(out.slice(a, b + 1));
+    // The guide asks for {"facts":[...]}. Also accept a bare array.
+    const o1 = out.indexOf('{');
+    const o2 = out.lastIndexOf('}');
+    const a1 = out.indexOf('[');
+    const a2 = out.lastIndexOf(']');
+    let arr: any = [];
+    if (o1 >= 0 && o2 > o1) {
+      try { const j = JSON.parse(out.slice(o1, o2 + 1)); arr = Array.isArray(j) ? j : j.facts; } catch { /* try the array form */ }
+    }
+    if (!Array.isArray(arr) || !arr.length) {
+      if (a1 < 0 || a2 <= a1) return [];
+      arr = JSON.parse(out.slice(a1, a2 + 1));
+    }
     return (Array.isArray(arr) ? arr : [])
-      .filter((x: any) => x && typeof x.fact === 'string' && x.fact.trim())
-      .slice(0, 6)
-      .map((x: any) => ({ text: String(x.fact).trim(), importance: Math.min(5, Math.max(1, Math.round(Number(x.importance) || 3))), ep }));
+      .map((x: any) => ({ ...x, text: x?.text ?? x?.fact }))
+      .filter((x: any) => x && typeof x.text === 'string' && x.text.trim())
+      .slice(0, 8)
+      .map((x: any): Fact => ({
+        text: String(x.text).trim(),
+        importance: Math.min(5, Math.max(1, Math.round(Number(x.importance) || 3))),
+        ep,
+        type: typeof x.type === 'string' ? x.type : undefined,
+        characters: Array.isArray(x.characters) ? x.characters.filter((c: unknown) => typeof c === 'string') : undefined,
+      }));
   } catch {
     return [];
   }
@@ -46,7 +62,7 @@ async function mergeRolling(cfg: ProviderSettings, key: string, story: Story, ch
     const out = await chatCompletion({
       cfg, apiKey: key, model: cfg.summaryModel,
       messages: [{ role: 'system', content: MERGE_SYSTEM }, { role: 'user', content: mergePrompt(story.title, chat.rollingSummary, chat.episodeSummaries) }],
-      maxTokens: 450, temperature: 0.3,
+      maxTokens: 450, temperature: TEMP.summary,
     });
     return out.trim();
   } catch {
@@ -66,7 +82,7 @@ export async function runMemoryPipeline(cfg: ProviderSettings, key: string, stor
 
   const [summary, newFacts] = await Promise.all([
     summarize(cfg, key, story, finishedEp, text, fallback),
-    extractFacts(cfg, key, story, finishedEp, text),
+    extractFacts(cfg, key, story, finishedEp, text, chat.facts),
   ]);
 
   let next: ChatState = {
