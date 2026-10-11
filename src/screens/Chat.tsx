@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Easing, FlatList, Keyboard, KeyboardAvoidingView, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Keyboard, KeyboardAvoidingView, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
@@ -14,6 +14,7 @@ import { useSettings } from '../state/settings';
 import { getApiKey } from '../ai/secure';
 import { deleteChat, loadChat, newChat, saveChat } from '../chat/store';
 import { TurnOptions, takeTurn } from '../chat/engine';
+import { ensureSpeech } from '../ai/speech';
 import { YOU, isYou, playableRoles } from '../chat/roles';
 import { cleanSpeech } from '../format';
 import { UiText, uiText } from '../chat/uiText';
@@ -142,6 +143,8 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Message whose voice text is still being prepared in the background.
+  const [prepId, setPrepId] = useState<string | null>(null);
   const chatRef = useRef<ChatState | null>(null);
   const busyRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -172,7 +175,20 @@ export default function Chat() {
       const key = await getApiKey();
       const final = await takeTurn(story, chatRef.current, opts, s.provider, key, setBoth);
       const ai = [...final.messages].reverse().find((m) => m.role === 'ai' && m.createdAt >= startedAt);
-      if (ai?.speech && s.autoPlay && (await isVoiceReady(story.language, voiceId))) speak(ai.id, cleanSpeech(ai.speech), story.language, voiceId);
+      // The text is already on screen. The voice text is finished in the background, then it plays.
+      if (ai?.speech && key) {
+        const m = ai;
+        setPrepId(m.id);
+        ensureSpeech(story.language, m.text, m.speech!, s.provider, key)
+          .then(async (better) => {
+            const c = chatRef.current;
+            if (c) { const n = { ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, speech: better } : x)) }; setBoth(n); saveChat(n); }
+            const stillLast = chatRef.current?.messages[chatRef.current.messages.length - 1]?.id === m.id;
+            if (s.autoPlay && stillLast && !busyRef.current && (await isVoiceReady(story.language, voiceId))) speak(m.id, cleanSpeech(better), story.language, voiceId);
+          })
+          .catch(() => {})
+          .finally(() => setPrepId((p) => (p === m.id ? null : p)));
+      }
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong. Please try again.');
     } finally {
@@ -293,7 +309,7 @@ export default function Chat() {
     return (
       <Pressable onLongPress={() => onLongPress(item)} style={s2.ai}>
         <RichText text={item.text} style={{ color: colors.text, fontSize: font, lineHeight: font * 1.55 }} />
-        {item.speech ? <View style={{ marginTop: 6 }}><VoiceChip id={item.id} text={cleanSpeech(item.speech)} lang={story.language} voiceId={voiceId} /></View> : null}
+        {item.id === prepId ? <View style={[s2.prepChip, { marginTop: 6 }]}><ActivityIndicator size="small" color={colors.accent} /><Text style={s2.prepText}>Preparing voice…</Text></View> : item.speech ? <View style={{ marginTop: 6 }}><VoiceChip id={item.id} text={cleanSpeech(item.speech)} lang={story.language} voiceId={voiceId} /></View> : null}
         {isLastAi ? (
           <View style={s2.actions}>
             <Pressable onPress={() => { stopSpeaking(); run({ advance: true }); }} style={s2.actionBtn} accessibilityLabel="Next">
@@ -355,7 +371,7 @@ export default function Chat() {
             ref={listRef}
             style={{ flex: 1 }}
             data={chat?.messages ?? []}
-            extraData={[busy, last?.id, myRole]}
+            extraData={[busy, last?.id, myRole, prepId]}
             keyExtractor={(m) => m.id}
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
@@ -454,6 +470,8 @@ const s2 = StyleSheet.create({
   subtitle: { color: colors.sub, fontSize: 12, marginTop: 1 },
 
   ai: { gap: 8 },
+  prepChip: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.card, borderWidth: 1.5, borderColor: colors.line },
+  prepText: { color: colors.sub, fontSize: 13 },
   userCard: { borderWidth: 1.5, borderColor: colors.line, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 6 },
   userLabel: { color: colors.sub, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   userText: { color: colors.text },

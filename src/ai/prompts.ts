@@ -10,8 +10,8 @@ const HISTORY_LIMIT = 14;
 
 const LANG_NOTE: Record<Lang, string> = {
   en: 'Write narration, dialogue and choices in simple English.',
-  hi: 'Write narration, dialogue and choices in Hinglish (Hindi in English letters). Not a single English sentence.',
-  bn: 'Write narration, dialogue and choices in Banglish (Bangla in English letters). Not a single English sentence.',
+  hi: 'Write narration, dialogue and choices in Hinglish (Hindi in English letters). Not a single English sentence, not even in narration or action lines (write "Woh kursi kheench kar baith jaati hai", never "She pulls out a chair").',
+  bn: 'Write narration, dialogue and choices in Banglish (Bangla in English letters). Not a single English sentence, not even in narration or action lines (write "Shey chair ta tene boshe", never "She pulls out a chair").',
 };
 
 const LANGUAGE_RULE: Record<Lang, string> = {

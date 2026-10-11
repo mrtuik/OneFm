@@ -191,8 +191,19 @@ export function stopSpeaking() {
   idle();
 }
 
+/** The voice starts after its first sentence is generated, so a long first sentence means a long silence. Cut it at a comma. */
+function shortFirstSentence(text: string): string {
+  const end = text.search(/[.]/);
+  const first = end < 0 ? text : text.slice(0, end);
+  if (first.length <= 70) return text;
+  const cut = first.indexOf(',', 25);
+  if (cut < 0 || cut > 90) return text;
+  return `${text.slice(0, cut)}.${text.slice(cut + 1)}`;
+}
+
 /** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */
 export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
+  text = shortFirstSentence(text);
   const my = ++token;
   const voice = resolveVoice(lang, voiceId);
   lastError = null;
