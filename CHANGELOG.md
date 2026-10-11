@@ -2,6 +2,8 @@
 
 ## V6.9
 - Voice (sherpa-onnx only, no fallback of any kind): Bangla model output is very quiet. Every generated sentence is now lifted to a clear level (99.9th percentile to 0.8, max 40x) before it plays and is saved. Old saved audio is ignored (new cache key). Text is also cut at the Bangla danda, so playback starts sooner.
+- Voice start time: before, the first play waited until almost the whole message was generated (about 20 s of silence on a slow voice), then replays started at 0 s from the saved file. Now playback starts after the first short piece (first piece is cut to about 45 characters, later pieces to 80 to 100). The voice model is also loaded in the background when a story chat or the Profile voice list opens, and the load is shared so it never starts twice.
+- Profile preview shows a spinner and "Getting the voice ready..." while it works, instead of looking dead.
 - Profile > Voice: a preview that fails now shows the real reason under the voice name (before, Profile showed nothing).
 - No outlines anywhere: buttons, chips, voice chip, your message card, composer chip, Profile voice rows and fields, age check, story page and the tab bar avatar ring are soft filled shapes. Selected items use a pink tint. The header divider line is gone.
 - App icon: the pen is smaller on a full black fill (launcher and adaptive icon).

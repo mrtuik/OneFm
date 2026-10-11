@@ -11,7 +11,7 @@ import { logout, useAuthUser } from '../firebase/auth';
 import { seedStories } from '../firebase/db';
 import { PRESETS, Preset, ProviderSettings, testConnection } from '../ai/provider';
 import { getApiKey, setApiKey } from '../ai/secure';
-import { VoiceInfo, downloadVoice, getVoiceError, subscribeVoiceError, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
+import { VoiceInfo, downloadVoice, getVoiceError, subscribeVoiceError, warmVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
 
 const SAMPLE: Record<Lang, string> = {
@@ -47,7 +47,9 @@ function Field({ label, ...p }: { label: string } & React.ComponentProps<typeof 
 function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; onUse: () => void; lang: Lang }) {
   const st = useVoiceStatus(v.id);
   const [playing, setPlaying] = useState(false);
-  useEffect(() => subscribePlaying((p) => setPlaying(p.id === 'preview:' + v.id)), [v.id]);
+  const [preparing, setPreparing] = useState(false);
+  useEffect(() => subscribePlaying((p) => { setPlaying(p.id === 'preview:' + v.id && !p.loading); setPreparing(p.id === 'preview:' + v.id && p.loading); }), [v.id]);
+  useEffect(() => { if (chosen && st.state === 'ready') warmVoice(lang, v.id); }, [chosen, st.state, lang, v.id]);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { const f = () => setErr(getVoiceError('preview:' + v.id)); f(); return subscribeVoiceError(f); }, [v.id]);
   const ready = st.state === 'ready';
@@ -62,14 +64,14 @@ function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; o
         <View style={{ flex: 1 }}>
           <Text style={s.voiceName}>{v.name}</Text>
           <Text style={[s.hint, !!err && ready && { color: colors.accent }]}>
-            {st.state === 'downloading' ? `${st.phase ?? 'Downloading'} ${st.percent}%` : ready ? (err ?? 'Ready, works offline') : st.error ? st.error : `${v.sizeMB} MB download`}
+            {st.state === 'downloading' ? `${st.phase ?? 'Downloading'} ${st.percent}%` : ready ? (err ?? (preparing ? 'Getting the voice ready...' : 'Ready, works offline')) : st.error ? st.error : `${v.sizeMB} MB download`}
           </Text>
         </View>
       </Pressable>
       {st.state === 'downloading' ? <ActivityIndicator color={colors.accent} /> : ready ? (
         <View style={s.voiceActions}>
-          <Pressable hitSlop={8} onPress={() => (playing ? stopSpeaking() : speak('preview:' + v.id, SAMPLE[lang], lang, v.id))} accessibilityLabel="Preview voice">
-            <Ionicons name={playing ? 'stop-circle-outline' : 'play-circle-outline'} size={28} color={colors.text} />
+          <Pressable hitSlop={8} onPress={() => (playing || preparing ? stopSpeaking() : speak('preview:' + v.id, SAMPLE[lang], lang, v.id))} accessibilityLabel="Preview voice">
+            {preparing ? <ActivityIndicator color={colors.text} style={{ width: 28, height: 28 }} /> : <Ionicons name={playing ? 'stop-circle-outline' : 'play-circle-outline'} size={28} color={colors.text} />}
           </Pressable>
           <Pressable hitSlop={8} onPress={confirmRemove} accessibilityLabel="Remove voice">
             <Ionicons name="trash-outline" size={22} color={colors.sub} />

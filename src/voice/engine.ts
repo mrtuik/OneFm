@@ -148,13 +148,33 @@ export async function removeVoice(id: string) {
 // ---- One model in memory at a time (a model is 60 to 100 MB of RAM) ----
 let loadedId: string | null = null;
 
+let loading: { id: string; p: Promise<void> } | null = null;
+
 async function ensureLoaded(voice: VoiceInfo): Promise<void> {
   if (!Native) throw new Error('This build has no voice engine. Install the latest APK.');
+  if (loading && loading.id !== voice.id) await loading.p.catch(() => {});
   if (loadedId === voice.id && Native.isReady()) return;
-  loadedId = null;
-  const ok = await Native.init(np(dirOf(voice.id)));
-  if (!ok) throw new Error('The voice could not start. Remove it and download it again.');
-  loadedId = voice.id;
+  // Warm-up and play share one load: the model is never started twice.
+  if (loading && loading.id === voice.id) return loading.p;
+  const p = (async () => {
+    loadedId = null;
+    const ok = await Native.init(np(dirOf(voice.id)));
+    if (!ok) throw new Error('The voice could not start. Remove it and download it again.');
+    loadedId = voice.id;
+  })();
+  loading = { id: voice.id, p };
+  p.then(() => { if (loading?.p === p) loading = null; }, () => { if (loading?.p === p) loading = null; });
+  return p;
+}
+
+/** Loads the voice model in the background (it takes several seconds) so the first message starts fast. */
+export async function warmVoice(lang: Lang, voiceId?: string): Promise<void> {
+  try {
+    const v = resolveVoice(lang, voiceId);
+    if ((await refreshVoiceStatus(v.id)).state !== 'ready') return;
+    if (state.id) return; // something is playing: do not disturb it
+    await ensureLoaded(v);
+  } catch { /* the real error shows when the voice is played */ }
 }
 
 // ---- One player for the whole app: only one message speaks at a time ----

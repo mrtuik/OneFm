@@ -178,10 +178,10 @@ class OneFmVoiceModule : Module() {
     val sentences = text.trim().split(Regex("(?<=[.\u0964?!])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
     val pieces = ArrayList<String>()
     for (sentence in sentences) {
-      if (sentence.length <= 130) { pieces.add(sentence); continue }
+      if (sentence.length <= 100) { pieces.add(sentence); continue }
       var cur = StringBuilder()
       for (part in sentence.split(Regex("(?<=,)\\s+"))) {
-        if (cur.isNotEmpty() && cur.length + part.length > 110) {
+        if (cur.isNotEmpty() && cur.length + part.length > 80) {
           pieces.add(cur.toString().trim())
           cur = StringBuilder()
         }
@@ -199,7 +199,14 @@ class OneFmVoiceModule : Module() {
     if (carry.isNotEmpty()) {
       if (out.isNotEmpty()) out[out.size - 1] = out[out.size - 1] + " " + carry else out.add(carry)
     }
-    return if (out.isEmpty()) listOf(text) else out
+    if (out.isEmpty()) return listOf(text)
+    // A short first piece: the first sound is ready after about 2 to 3 seconds of generating.
+    val first = out[0]
+    if (first.length > 50) {
+      val cut = first.lastIndexOf(' ', 45)
+      if (cut >= 20) { out[0] = first.substring(0, cut).trim(); out.add(1, first.substring(cut + 1).trim()) }
+    }
+    return out
   }
 
   private fun readFully(input: BufferedInputStream, buf: ByteArray): Int {
@@ -417,15 +424,9 @@ class OneFmVoiceModule : Module() {
                 }
                 doneChars += chunk.length
 
-                // Start playing as soon as the audio already generated will last until the rest is ready.
-                if (!started && totalFrames > 0) {
-                  val buffered = totalFrames.toDouble() / sr
-                  val elapsed = (System.currentTimeMillis() - t0) / 1000.0
-                  val rtf = elapsed / buffered
-                  val estTotal = buffered * totalChars / maxOf(1, doneChars)
-                  val remaining = maxOf(0.0, estTotal - buffered)
-                  if (buffered >= 1.0 && (buffered >= remaining * rtf || (elapsed >= 6.0 && buffered >= 2.0) || buffered >= 15.0)) begin()
-                }
+                // Start at once with the first piece. The old rule waited until almost everything was generated,
+                // which on a slow voice meant 20 seconds of silence. A short pause between pieces is better than that.
+                if (!started && totalFrames > 0) begin()
               }
             }
             if (cancelled || activeId != id) finishedAll = false

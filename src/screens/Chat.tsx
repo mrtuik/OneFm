@@ -18,7 +18,7 @@ import { ensureSpeech } from '../ai/speech';
 import { YOU, isYou, playableRoles } from '../chat/roles';
 import { cleanSpeech } from '../format';
 import { UiText, uiText } from '../chat/uiText';
-import { isVoiceReady, speak, stopSpeaking } from '../voice/engine';
+import { isVoiceReady, speak, stopSpeaking, warmVoice } from '../voice/engine';
 import { incrementPlay } from '../firebase/db';
 
 const FONT = { small: 14, medium: 16, large: 18 } as const;
@@ -158,6 +158,8 @@ export default function Chat() {
     loadChat(story.id).then((c) => { setBoth(c ?? newChat(story)); setLoaded(true); });
     return () => stopSpeaking();
   }, [story.id]);
+
+  useEffect(() => { warmVoice(story.language, voiceId); }, [story.language, voiceId]);
 
   useFocusEffect(useCallback(() => { getApiKey().then((k) => setHasKey(!!k)); }, []));
 
