@@ -2,6 +2,7 @@ import { ChatMessage, ChatState, Story } from '../types';
 import { ProviderError, ProviderSettings, chatCompletion } from '../ai/provider';
 import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, parseReply } from '../ai/prompts';
 import { runMemoryPipeline } from '../ai/memory';
+import { ensureSpeech } from '../ai/speech';
 import { saveChat } from './store';
 import { cleanSpeech } from '../format';
 import { uiText } from './uiText';
@@ -27,13 +28,13 @@ async function askModel(story: Story, chat: ChatState, finalUser: string, histor
   let lastRaw = '';
   // Structured reply. If parsing fails, retry once, then show the plain text.
   for (let attempt = 0; attempt < 2; attempt++) {
-    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 700, temperature: TEMP.chat });
+    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 1000, temperature: TEMP.chat });
     const parsed = parseReply(lastRaw);
-    if (parsed) return parsed;
+    if (parsed) return { ...parsed, speech_text: await ensureSpeech(story.language, parsed.display_text, parsed.speech_text, cfg, key) };
   }
   const plain = lastRaw.trim();
   if (!plain) throw new ProviderError('bad_reply', 'The AI sent a reply that could not be read.');
-  return { speaker: 'Narrator', display_text: plain, speech_text: cleanSpeech(plain) || plain.replace(/\*/g, ''), choices: [], episode_complete: false };
+  return { speaker: 'Narrator', display_text: plain, speech_text: await ensureSpeech(story.language, plain, cleanSpeech(plain) || plain.replace(/\*/g, ''), cfg, key), choices: [], episode_complete: false };
 }
 
 /**

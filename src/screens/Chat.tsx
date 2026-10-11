@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, Dimensions, Easing, FlatList, Keyboard, KeyboardAvoidingView, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
@@ -40,22 +40,57 @@ function useKeyboardOpen() {
 
 function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
+  const H = Dimensions.get('window').height;
+  const y = useRef(new Animated.Value(H)).current;
+  const [mounted, setMounted] = useState(visible);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      y.setValue(H);
+      Animated.timing(y, { toValue: 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    } else {
+      Animated.timing(y, { toValue: H, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setMounted(false));
+    }
+  }, [visible]);
+
+  // Drag the sheet down to close it. A short or slow drag springs back.
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderMove: (_, g) => { if (g.dy > 0) y.setValue(g.dy); },
+    onPanResponderRelease: (_, g) => {
+      if (g.dy > 110 || g.vy > 0.9) closeRef.current();
+      else Animated.spring(y, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+    },
+    onPanResponderTerminate: () => Animated.spring(y, { toValue: 0, useNativeDriver: true }).start(),
+  })).current;
+
+  const dim = y.interpolate({ inputRange: [0, H], outputRange: [1, 0], extrapolate: 'clamp' });
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={s2.backdrop} onPress={onClose}>
-        <Pressable style={[s2.sheet, { paddingBottom: insets.bottom + 16 }]} onPress={() => {}}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <View style={s2.backdrop}>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)', opacity: dim }]} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Animated.View style={[s2.sheet, { paddingBottom: insets.bottom + 20, transform: [{ translateY: y }] }]} {...pan.panHandlers}>
+          <View style={s2.handle} />
           {title ? <Text style={s2.sheetTitle}>{title}</Text> : null}
-          {children}
-        </Pressable>
-      </Pressable>
+          <View style={s2.sheetList}>{children}</View>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
 
 function SheetItem({ icon, label, onPress, danger, disabled }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; onPress: () => void; danger?: boolean; disabled?: boolean }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[s2.sheetItem, disabled && { opacity: 0.4 }]}>
-      <Ionicons name={icon} size={20} color={danger ? colors.accent : colors.text} />
+    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [s2.sheetItem, danger && s2.sheetItemDanger, pressed && { opacity: 0.7 }, disabled && { opacity: 0.4 }]}>
+      <View style={[s2.sheetIcon, danger && s2.sheetIconDanger]}>
+        <Ionicons name={icon} size={20} color={danger ? colors.accent : colors.text} />
+      </View>
       <Text style={[s2.sheetItemText, danger && { color: colors.accent }]}>{label}</Text>
     </Pressable>
   );
@@ -292,13 +327,14 @@ export default function Chat() {
       <View style={s2.header}>
         <View style={s2.headLeft}>
           <Pressable onPress={() => nav.goBack()} hitSlop={10} style={s2.iconBtn} accessibilityLabel="Back"><Ionicons name="arrow-back" size={22} color={colors.text} /></Pressable>
-          <Pressable onPress={() => setMenuOpen(true)} hitSlop={10} style={s2.iconBtn} accessibilityLabel="Chat options"><Ionicons name="ellipsis-vertical" size={20} color={colors.text} /></Pressable>
         </View>
         <View style={s2.titleBox}>
           <Text style={s2.title} numberOfLines={1}>{story.title}</Text>
-          <Text style={s2.subtitle} numberOfLines={1}>{busy ? t.writing : needRole ? t.chooseRole : isYou(myRole) ? t.youAreMain : t.youAre(myRole!)}</Text>
+          <Text style={s2.subtitle} numberOfLines={1}>{busy ? t.writing : needRole ? t.chooseRole : isYou(myRole) ? t.youAreMain : t.youAre(myRole!)}{needRole ? '' : `  ·  Ep: ${chat?.ep ?? 1}`}</Text>
         </View>
-        <View style={s2.headRight}><View style={s2.epPill}><Text style={s2.epText}>Ep: {chat?.ep ?? 1}</Text></View></View>
+        <View style={s2.headRight}>
+          <Pressable onPress={() => setMenuOpen(true)} hitSlop={8} style={s2.menuBtn} accessibilityLabel="Chat options"><Ionicons name="ellipsis-vertical" size={18} color={colors.text} /></Pressable>
+        </View>
       </View>
 
       {showPicker ? (
@@ -384,7 +420,6 @@ export default function Chat() {
                   <Pressable onPress={() => setPickerOpen(true)} hitSlop={6} style={s2.charChip} accessibilityLabel="Change role">
                     <View style={s2.charDot}><Text style={s2.charInitial}>{initial}</Text></View>
                     <Text style={s2.charName} numberOfLines={1}>{myName}</Text>
-                    <Ionicons name="swap-horizontal" size={14} color={colors.sub} />
                   </Pressable>
                   <View style={{ flex: 1 }} />
                   <Pressable onPress={() => send(input)} disabled={!canSend} style={[s2.send, !canSend && s2.sendOff]} accessibilityLabel="Send">
@@ -410,14 +445,13 @@ export default function Chat() {
 const s2 = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', height: 60, paddingHorizontal: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  headLeft: { flexDirection: 'row', width: 92 },
-  headRight: { width: 92, alignItems: 'flex-end', paddingRight: 8 },
+  headLeft: { flexDirection: 'row', width: 64 },
+  headRight: { width: 64, alignItems: 'flex-end', paddingRight: 8 },
+  menuBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   titleBox: { flex: 1, alignItems: 'center' },
   title: { color: colors.text, fontSize: 17, fontWeight: '700' },
   subtitle: { color: colors.sub, fontSize: 12, marginTop: 1 },
-  epPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.chip, borderWidth: 1.5, borderColor: colors.line },
-  epText: { color: colors.text, fontSize: 13, fontWeight: '700' },
 
   ai: { gap: 8 },
   userCard: { borderWidth: 1.5, borderColor: colors.line, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 6 },
@@ -444,7 +478,7 @@ const s2 = StyleSheet.create({
   composer: { borderRadius: 24, backgroundColor: colors.surface, paddingTop: 6, paddingHorizontal: 8, paddingBottom: 8 },
   input: { minHeight: 48, maxHeight: 140, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 6, color: colors.text, fontSize: 16, lineHeight: 22 },
   toolbar: { flexDirection: 'row', alignItems: 'center', paddingTop: 2 },
-  charChip: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 200, height: 36, paddingLeft: 4, paddingRight: 12, borderRadius: 18, backgroundColor: 'rgba(254,244,244,0.08)' },
+  charChip: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 200, height: 36, paddingLeft: 4, paddingRight: 14, borderRadius: 18, backgroundColor: 'rgba(254,244,244,0.08)' },
   charDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
   charInitial: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   charName: { color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1 },
@@ -466,9 +500,14 @@ const s2 = StyleSheet.create({
   cancelPick: { alignSelf: 'center', padding: 14, marginTop: 8 },
   cancelPickText: { color: colors.sub, fontSize: 15, fontWeight: '600' },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 18, paddingHorizontal: space.screen, gap: 4 },
-  sheetTitle: { color: colors.sub, fontSize: 13, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 },
-  sheetItem: { flexDirection: 'row', alignItems: 'center', gap: 14, height: 52 },
+  backdrop: { flex: 1, justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 10, paddingHorizontal: space.screen },
+  handle: { alignSelf: 'center', width: 42, height: 4, borderRadius: 2, backgroundColor: 'rgba(254,244,244,0.28)', marginBottom: 16 },
+  sheetTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 14, paddingHorizontal: 4 },
+  sheetList: { gap: 8 },
+  sheetItem: { flexDirection: 'row', alignItems: 'center', gap: 14, height: 60, paddingHorizontal: 10, borderRadius: 16, backgroundColor: 'rgba(254,244,244,0.05)' },
+  sheetItemDanger: { backgroundColor: colors.accentSoft },
+  sheetIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(254,244,244,0.08)', alignItems: 'center', justifyContent: 'center' },
+  sheetIconDanger: { backgroundColor: 'rgba(227,26,78,0.18)' },
   sheetItemText: { color: colors.text, fontSize: 16, fontWeight: '600' },
 });

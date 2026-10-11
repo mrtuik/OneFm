@@ -18,12 +18,12 @@ export function withRoleInfo(story: Story): Story {
   };
 }
 
-/** Roles the reader may play: the unnamed main character ("You") and every character that fits their gender. */
+/** Roles the reader may play: only the story's named main characters that fit their gender. */
 export function playableRoles(story: Story, gender: Gender | null): Character[] {
   const s = withRoleInfo(story);
-  const you: Character = { name: YOU, role: 'The main character of the story. The story speaks to you directly.' };
   const fits = s.characters.filter((c) => !c.gender || !gender || c.gender === gender);
-  return [you, ...fits];
+  // Never leave the picker empty (for example a story with only female roles and a male reader).
+  return fits.length ? fits : s.characters;
 }
 
 export const isYou = (role?: string) => !role || role === YOU;

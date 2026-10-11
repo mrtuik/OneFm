@@ -145,7 +145,7 @@ class OneFmVoiceModule : Module() {
           dataDir = f.dataDir?.absolutePath ?: "",
           lengthScale = 1.0f
         )
-        val modelConfig = OfflineTtsModelConfig(vits = vits, numThreads = 2, provider = "cpu", debug = false)
+        val modelConfig = OfflineTtsModelConfig(vits = vits, numThreads = 4, provider = "cpu", debug = false)
         val newTts = OfflineTts(config = OfflineTtsConfig(model = modelConfig))
         synchronized(this@OneFmVoiceModule) { tts = newTts }
         true
@@ -190,7 +190,9 @@ class OneFmVoiceModule : Module() {
           requestAudioFocus()
           val sampleRate = currentTts.sampleRate()
           val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
-          val bufSize = maxOf(minBuf, sampleRate * 4)
+          // 20 s of buffer, and playback starts only after 1.5 s is ready, so slow generation cannot leave gaps.
+          val bufSize = maxOf(minBuf, sampleRate * 4 * 20)
+          val primeFrames = (sampleRate * 1.5).toInt()
           audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
               AudioAttributes.Builder()
@@ -208,7 +210,15 @@ class OneFmVoiceModule : Module() {
             .setBufferSizeInBytes(bufSize)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
-          currentAudioTrack = audioTrack
+          val track = audioTrack!!
+          currentAudioTrack = track
+          fun begin() {
+            if (!started) {
+              started = true
+              sendEvent("onStart", mapOf("id" to id))
+              track.play()
+            }
+          }
 
           var totalWrittenFrames = 0
           synchronized(genLock) {
@@ -217,25 +227,24 @@ class OneFmVoiceModule : Module() {
                 0
               } else {
                 if (samples.isNotEmpty()) {
-                  if (!started) {
-                    started = true
-                    sendEvent("onStart", mapOf("id" to id))
-                    audioTrack.play()
-                  }
-                  audioTrack.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
+                  track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
                   totalWrittenFrames += samples.size
+                  if (!started && totalWrittenFrames >= primeFrames) begin()
                 }
                 1
               }
             })
           }
 
+          // Short texts never reach the 1.5 s mark: start them now.
+          if (!started && totalWrittenFrames > 0 && !cancelled && activeId == id) begin()
+
           // Wait until everything written has been played. Give up if the position stops moving for 4 s.
           if (started && !cancelled && activeId == id) {
             var lastHead = -1
             var lastMove = System.currentTimeMillis()
             while (!cancelled && activeId == id) {
-              val head = audioTrack.playbackHeadPosition
+              val head = track.playbackHeadPosition
               if (head >= totalWrittenFrames) break
               val now = System.currentTimeMillis()
               if (head != lastHead) { lastHead = head; lastMove = now }

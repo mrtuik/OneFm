@@ -37,6 +37,7 @@ export function masterPrompt(lang: Lang): string {
    *Arjun shrugs, a half smile on his face.*
 
    Arjun: "Seat tumhari hai kya?"
+   Narration and dialogue are ALWAYS separate paragraphs. Never put a character's spoken words inside a narration paragraph, and never put narration in the same paragraph as a dialogue line. Every spoken line must start with the speaker's name and a colon, even when only one character speaks. Write Aanya: "Theek hai." and never "Aanya ne kaha, ..." or an unnamed quote. Do not write a Choices list inside display_text (choices go only in the choices field).
 2. Write 4 to 8 short paragraphs (about 90 to 170 words), each with at most two sentences. Never write a wall of text.
 3. Show, don't tell. Use body language, objects, small actions and silence instead of stating emotions.
 4. Give each character a distinct voice that matches their language_style and speech_habits. Never make characters sound the same.
@@ -194,6 +195,28 @@ export interface Reply {
   episode_complete: boolean;
 }
 
+/**
+ * Keeps narration and dialogue in separate paragraphs, and every spoken line labelled with its speaker.
+ * Only lines that mix several parts (narration + quote, or an unlabelled quote) are touched.
+ */
+export function normalizeDisplay(text: string, speaker: string): string {
+  const PART = /(\*[^*]+\*|(?:[A-Za-z][A-Za-z .'-]{0,24}:\s*)?["\u201C][^"\u201D]+["\u201D])/g;
+  const out: string[] = [];
+  for (const raw of text.replace(/\r/g, '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const pieces = line.split(PART).map((p) => p.trim()).filter(Boolean);
+    const hasQuote = pieces.some((p) => /["\u201C]/.test(p) && !p.startsWith('*'));
+    if (pieces.length < 2 && !(hasQuote && !/^[A-Za-z][A-Za-z .'-]{0,24}:/.test(line))) { out.push(line); continue; }
+    for (const p of pieces) {
+      if (p.startsWith('*') && p.endsWith('*')) out.push(p);
+      else if (/["\u201C]/.test(p)) out.push(/^[A-Za-z][A-Za-z .'-]{0,24}:/.test(p) || !speaker || speaker === 'Narrator' ? p : `${speaker}: ${p}`);
+      else if (/[A-Za-z\u0900-\u097F\u0980-\u09FF]/.test(p)) out.push(`*${p.replace(/\*/g, '')}*`);
+    }
+  }
+  return out.join('\n\n');
+}
+
 /** Pulls the JSON object out of a model reply. Returns null when it cannot be parsed. */
 export function parseReply(raw: string): Reply | null {
   const a = raw.indexOf('{');
@@ -203,9 +226,10 @@ export function parseReply(raw: string): Reply | null {
     const j = JSON.parse(raw.slice(a, b + 1));
     const display = typeof j.display_text === 'string' ? j.display_text.trim() : '';
     if (!display) return null;
+    const speaker = typeof j.speaker === 'string' && j.speaker.trim() ? j.speaker.trim() : 'Narrator';
     return {
-      speaker: typeof j.speaker === 'string' && j.speaker.trim() ? j.speaker.trim() : 'Narrator',
-      display_text: display,
+      speaker,
+      display_text: normalizeDisplay(display, speaker),
       speech_text: cleanSpeech(typeof j.speech_text === 'string' && j.speech_text.trim() ? j.speech_text : display) || display.replace(/\*/g, ''),
       choices: Array.isArray(j.choices) ? j.choices.filter((c: unknown) => typeof c === 'string' && c.trim()).slice(0, 3) : [],
       episode_complete: j.episode_complete === true,
