@@ -1,11 +1,11 @@
 import React from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 let n = 0;
 /** Simple linear gradient drawn with SVG. `from` and `to` are CSS colors; opacity applies to each end. */
 export function GradientView({ from, to, fromOpacity = 1, toOpacity = 1, diagonal, style, children }: {
-  from: string; to: string; fromOpacity?: number; toOpacity?: number; diagonal?: boolean; style?: ViewStyle; children?: React.ReactNode;
+  from: string; to: string; fromOpacity?: number; toOpacity?: number; diagonal?: boolean; style?: StyleProp<ViewStyle>; children?: React.ReactNode;
 }) {
   const id = React.useRef(`g${n++}`).current;
   return (

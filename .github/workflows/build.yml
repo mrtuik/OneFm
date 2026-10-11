@@ -114,7 +114,22 @@ jobs:
           ONEFM_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           ONEFM_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           ONEFM_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --build-cache
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --build-cache 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+
+      # When Gradle fails, pull the real cause (CMake, Kotlin, Java, missing symbol) out of the long log.
+      - name: Show the real build error
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/gradle.log"
+          [ -f "$LOG" ] || exit 0
+          {
+            echo '### Real build error'
+            echo '```'
+            grep -n -E -A12 "CMake Error|CMake Warning \(dev\)|^e: |error: |FAILED$|What went wrong" "$LOG" | grep -v "^\s*at " | cut -c1-260 | head -120
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Prints the SHA-1 you must add in Firebase (shown in the run Summary page too).
       - name: Show SHA-1 of the APK signing key

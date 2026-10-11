@@ -1,5 +1,9 @@
 # One Fm changelog
 
+## V4.1
+- Fixed the TypeScript errors in StoryDetail (GradientView now accepts style arrays and StyleSheet.absoluteFill).
+- Build workflow now saves the Gradle log and prints the real error (CMake, Kotlin, Java) in the run Summary under "Real build error", so a native failure like configureCMake is readable.
+
 ## V4
 - Voice: sherpa-onnx is now the voice engine (`react-native-sherpa-onnx`). Phone text-to-speech (expo-speech) is removed. English, Hindi and Bangla voices download on demand, work offline, and stream into a native PCM player. Voice chip shows Download, progress, loading and play states. Profile > Voice lists voices with Get, Preview, Remove and a selected voice per language.
 - Chat screen redesigned: Claude-style composer (text field on top, character chip and send button underneath), rounded card that gets a pink outline when focused, tap anywhere on it to type, keyboard opens by itself, field stays focused while the AI writes, keyboard-aware layout, safe bottom padding. AI messages have a small speaker avatar, your messages are outlined cards with a YOU label, episode end is a divider line, header shows who you are talking to.
