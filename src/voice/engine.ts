@@ -216,9 +216,9 @@ const setVoiceError = (id: string | null, message: string | null) => {
 
 if (Native?.addListener) {
   Native.addListener('onStart', ({ id }: { id: number }) => { if (id === activeJob && state.id) { firstMs = Date.now() - callAt; emit({ id: state.id, loading: false }); } });
-  Native.addListener('onInfo', ({ id, gen, audio, raw, peak }: { id: number; gen: number; audio: number; raw: number; peak: number }) => {
+  Native.addListener('onInfo', ({ id, gen, audio, raw, peak, rms, dc }: { id: number; gen: number; audio: number; raw: number; peak: number; rms?: number; dc?: number }) => {
     if (id !== activeJob || !activeMsg) return;
-    infoFor = { id: activeMsg, text: `model ${loadMs ? sec(loadMs) : 'ready'} · first sound ${sec(firstMs)} · ${audio.toFixed(1)}s audio made in ${sec(gen)} · level ${raw.toFixed(3)} to ${peak.toFixed(2)}` };
+    infoFor = { id: activeMsg, text: `model ${loadMs ? sec(loadMs) : 'ready'} · first sound ${sec(firstMs)} · ${audio.toFixed(1)}s audio made in ${sec(gen)} · level ${raw.toFixed(3)} to ${peak.toFixed(2)} · rms ${(rms ?? 0).toFixed(3)} · dc ${(dc ?? 0).toFixed(3)}` };
     errorListeners.forEach((l) => l());
   });
   Native.addListener('onDone', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; if (!continueParts()) idle(); } });

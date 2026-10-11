@@ -1,6 +1,7 @@
 # One Fm changelog
 
 ## V6.9.1
+- Voice: a constant offset (DC) is removed from every generated sentence before the volume lift. The numbers line now also shows rms (average loudness) and dc (offset removed): peak 1.00 with a tiny rms means the sound is a flat line, not speech.
 - Profile preview is no longer saved or replayed from a file. It is always generated live, the same path that plays in chat, so the numbers line shows real generation time.
 - The volume lift never pushes the loudest sample past full scale any more (before, a 40x lift could clip it into clicks).
 - Voice text conversion first tries Google Input Tools (the engine behind Google's Bangla/Hindi keyboards): Banglish or Hinglish becomes native script in a fraction of a second, no API key. If it fails or the result still has English letters, the AI conversion runs as before.

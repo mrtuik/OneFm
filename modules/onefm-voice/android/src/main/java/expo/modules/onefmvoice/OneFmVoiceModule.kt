@@ -303,6 +303,9 @@ class OneFmVoiceModule : Module() {
           // Loudest sample and bad samples of this message. All-quiet audio means the voice made no sound.
           var peak = 0f
           var rawPeak = 0f
+          // Average level (rms) of what is played and the largest constant offset removed: shown on screen to tell quiet audio from a DC offset.
+          var sumSq = 0.0
+          var dcMax = 0f
           var badSamples = 0
           var sampleRateUsed = 0
           val mediaVolume = try {
@@ -408,6 +411,13 @@ class OneFmVoiceModule : Module() {
                   // Level from the 99.9th percentile, not the single loudest sample, so one click cannot keep the voice quiet.
                   var total = 0
                   for (c in parts) total += c.size
+                  // Remove a constant offset (DC). A voice riding on an offset gets lifted into a flat line at full scale,
+                  // which is silent to the ear while the peak meter reads 1.00.
+                  var dcSum = 0.0
+                  for (c in parts) for (v in c) dcSum += v
+                  val dc = (dcSum / maxOf(total, 1)).toFloat()
+                  if (kotlin.math.abs(dc) > 0.0003f) for (c in parts) for (i in c.indices) c[i] = c[i] - dc
+                  if (kotlin.math.abs(dc) > dcMax) dcMax = kotlin.math.abs(dc)
                   val mags = FloatArray(total)
                   var mi = 0
                   for (c in parts) for (v in c) { mags[mi++] = if (v < 0f) -v else v }
@@ -418,7 +428,7 @@ class OneFmVoiceModule : Module() {
                   val g = if (level >= 0.002f && level < 0.8f) minOf(0.8f / level, 0.97f / maxOf(loudest, 0.0001f)).coerceIn(1f, 40f) else 1f
                   for (c in parts) {
                     if (g != 1f) for (i in c.indices) c[i] = (c[i] * g).coerceIn(-1f, 1f)
-                    for (v in c) { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
+                    for (v in c) { val av = if (v < 0f) -v else v; if (av > peak) peak = av; sumSq += (v * v).toDouble() }
                     t.write(c, 0, c.size, AudioTrack.WRITE_BLOCKING)
                     totalFrames += c.size
                     // Play as soon as the first samples are in the buffer. If begin() waited for the whole loop,
@@ -449,7 +459,9 @@ class OneFmVoiceModule : Module() {
                 "gen" to (System.currentTimeMillis() - t0).toInt(),
                 "audio" to (totalFrames.toDouble() / sr),
                 "raw" to rawPeak.toDouble(),
-                "peak" to peak.toDouble()
+                "peak" to peak.toDouble(),
+                "rms" to Math.sqrt(sumSq / maxOf(totalFrames, 1)),
+                "dc" to dcMax.toDouble()
               ))
             }
 
