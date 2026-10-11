@@ -202,9 +202,9 @@ class OneFmVoiceModule : Module() {
     if (out.isEmpty()) return listOf(text)
     // A short first piece: the first sound is ready after about 2 to 3 seconds of generating.
     val first = out[0]
-    if (first.length > 50) {
-      val cut = first.lastIndexOf(' ', 45)
-      if (cut >= 20) { out[0] = first.substring(0, cut).trim(); out.add(1, first.substring(cut + 1).trim()) }
+    if (first.length > 40) {
+      val cut = first.lastIndexOf(' ', 36)
+      if (cut >= 16) { out[0] = first.substring(0, cut).trim(); out.add(1, first.substring(cut + 1).trim()) }
     }
     return out
   }
@@ -221,7 +221,7 @@ class OneFmVoiceModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("OneFmVoice")
-    Events("onStart", "onDone", "onStopped", "onError")
+    Events("onStart", "onDone", "onStopped", "onError", "onInfo")
 
     OnDestroy {
       stopPlayback()
@@ -302,6 +302,7 @@ class OneFmVoiceModule : Module() {
           var totalFrames = 0
           // Loudest sample and bad samples of this message. All-quiet audio means the voice made no sound.
           var peak = 0f
+          var rawPeak = 0f
           var badSamples = 0
           var sampleRateUsed = 0
           val mediaVolume = try {
@@ -397,6 +398,7 @@ class OneFmVoiceModule : Module() {
                     1
                   }
                 })
+                if (chunkPeak > rawPeak) rawPeak = chunkPeak
                 if (!cancelled && activeId == id && parts.isNotEmpty()) {
                   // Level from the 99.9th percentile, not the single loudest sample, so one click cannot keep the voice quiet.
                   var total = 0
@@ -412,6 +414,9 @@ class OneFmVoiceModule : Module() {
                     for (v in c) { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
                     t.write(c, 0, c.size, AudioTrack.WRITE_BLOCKING)
                     totalFrames += c.size
+                    // Play as soon as the first samples are in the buffer. If begin() waited for the whole loop,
+                    // a piece longer than the buffer would block write() forever (nothing plays, so nothing drains).
+                    if (!started) begin()
                     val o = out
                     if (o != null) {
                       try {
@@ -430,6 +435,16 @@ class OneFmVoiceModule : Module() {
               }
             }
             if (cancelled || activeId != id) finishedAll = false
+            // Numbers for the screen: how long generating took, how much audio came out, and its level before and after the lift.
+            if (!cancelled && activeId == id && totalFrames > 0) {
+              sendEvent("onInfo", mapOf(
+                "id" to id,
+                "gen" to (System.currentTimeMillis() - t0).toInt(),
+                "audio" to (totalFrames.toDouble() / sr),
+                "raw" to rawPeak.toDouble(),
+                "peak" to peak.toDouble()
+              ))
+            }
 
             // Short texts never reach the start rule: start them now.
             if (!started && totalFrames > 0 && !cancelled && activeId == id) begin()

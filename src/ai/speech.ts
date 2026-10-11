@@ -20,6 +20,13 @@ const latinShare = (t: string) => {
   return all ? latin / all : 0;
 };
 
+/** True when the voice text the story model wrote is already usable: native script, covers the whole message. */
+export function speechIsGood(lang: Lang, display: string, speech: string): boolean {
+  if (lang === 'en') return true;
+  const t = cleanSpeech(speech);
+  return !!t && covers(display, t) && latinShare(t) < 0.1;
+}
+
 const RULES: Record<'hi' | 'bn', string> = {
   hi: `Rewrite the Hinglish text in Hindi, Devanagari script (हिन्दी), exactly as a native Hindi writer would spell it. Use correct matras, nukta (ज़, फ़) and conjuncts. Write chai as चाय, kahani as कहानी, hai as है, hain as हैं, nahin as नहीं. English loan words go in Devanagari too (phone as फ़ोन). No Latin letters and no digits (write numbers as words).`,
   bn: `Rewrite the Banglish text in Bengali script (বাংলা), exactly as a native Bengali writer would spell it. Use correct vowel signs, ya-phala, ref and juktakkhor (conjuncts). Write golpo as গল্প, bhalo as ভালো, ache as আছে, ami as আমি. English loan words go in Bengali script too. No Latin letters and no digits (write numbers as words).`,

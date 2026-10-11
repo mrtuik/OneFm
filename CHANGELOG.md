@@ -1,6 +1,13 @@
 # One Fm changelog
 
+## V6.9.1
+- Voice no longer waits for a second network call: when the story's own speech_text is already clean Bangla/Hindi script and covers the whole message, it plays at once. The extra rewrite call (15 to 25 s on mobile data) now runs only when speech_text is bad.
+- Native player: playback starts right after the first samples are written (before, play() came only after a whole write loop, so a piece longer than the buffer could block forever).
+- First spoken piece is cut shorter (about 36 characters) so the first sound is ready sooner.
+
 ## V6.9
+- Numbers on screen: under a voice message chip and under a Profile voice (after you play it) a small gray line shows where the time goes: model load, first sound, audio length made and how long it took, and the level before and after the lift. Send a screenshot of it and the slow part is clear.
+- The voice model is loaded when the app opens (not only when a chat opens). Preview sentence is longer so it is closer to a story reply. Audio cache key bumped (v3).
 - Voice (sherpa-onnx only, no fallback of any kind): Bangla model output is very quiet. Every generated sentence is now lifted to a clear level (99.9th percentile to 0.8, max 40x) before it plays and is saved. Old saved audio is ignored (new cache key). Text is also cut at the Bangla danda, so playback starts sooner.
 - Voice start time: before, the first play waited until almost the whole message was generated (about 20 s of silence on a slow voice), then replays started at 0 s from the saved file. Now playback starts after the first short piece (first piece is cut to about 45 characters, later pieces to 80 to 100). The voice model is also loaded in the background when a story chat or the Profile voice list opens, and the load is shared so it never starts twice.
 - Profile preview shows a spinner and "Getting the voice ready..." while it works, instead of looking dead.

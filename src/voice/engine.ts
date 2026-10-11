@@ -199,6 +199,14 @@ const idle = () => emit({ id: null, loading: false });
 let voiceError: { id: string; message: string } | null = null;
 let activeMsg: string | null = null;
 const errorListeners = new Set<() => void>();
+
+// ---- Timing numbers shown under the voice (where the waiting time goes) ----
+let infoFor: { id: string; text: string } | null = null;
+let callAt = 0;
+let loadMs = 0;
+let firstMs = 0;
+export const getVoiceInfo = (id: string): string | null => (infoFor && infoFor.id === id ? infoFor.text : null);
+const sec = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 export const getVoiceError = (id: string): string | null => (voiceError && voiceError.id === id ? voiceError.message : null);
 export const subscribeVoiceError = (l: () => void) => { errorListeners.add(l); return () => { errorListeners.delete(l); }; };
 const setVoiceError = (id: string | null, message: string | null) => {
@@ -207,7 +215,12 @@ const setVoiceError = (id: string | null, message: string | null) => {
 };
 
 if (Native?.addListener) {
-  Native.addListener('onStart', ({ id }: { id: number }) => { if (id === activeJob && state.id) emit({ id: state.id, loading: false }); });
+  Native.addListener('onStart', ({ id }: { id: number }) => { if (id === activeJob && state.id) { firstMs = Date.now() - callAt; emit({ id: state.id, loading: false }); } });
+  Native.addListener('onInfo', ({ id, gen, audio, raw, peak }: { id: number; gen: number; audio: number; raw: number; peak: number }) => {
+    if (id !== activeJob || !activeMsg) return;
+    infoFor = { id: activeMsg, text: `model ${loadMs ? sec(loadMs) : 'ready'} · first sound ${sec(firstMs)} · ${audio.toFixed(1)}s audio made in ${sec(gen)} · level ${raw.toFixed(3)} to ${peak.toFixed(2)}` };
+    errorListeners.forEach((l) => l());
+  });
   Native.addListener('onDone', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
   Native.addListener('onStopped', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
   Native.addListener('onError', ({ id, message }: { id: number; message: string }) => {
@@ -226,13 +239,14 @@ export function stopSpeaking() {
 function cacheKeyOf(voiceId: string, text: string): string {
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
-  return `${voiceId}_v2_${h.toString(36)}_${text.length}`;
+  return `${voiceId}_v3_${h.toString(36)}_${text.length}`;
 }
 
 /** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */
 export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
   const my = ++token;
   const voice = resolveVoice(lang, voiceId);
+  callAt = Date.now(); loadMs = 0; firstMs = 0; infoFor = null;
   lastError = null;
   activeMsg = id;
   setVoiceError(null, null);
@@ -257,7 +271,7 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
     // A message that was played before is saved as audio: no model needed, it starts at once.
     let cached = false;
     try { cached = !!Native?.hasCache?.(key); } catch { cached = false; }
-    if (!cached) await ensureLoaded(voice);
+    if (!cached) { const l0 = Date.now(); await ensureLoaded(voice); loadMs = Date.now() - l0 < 50 ? 0 : Date.now() - l0; }
     if (my !== token) return;
     activeJob = ++jobCounter;
     Native.speak(activeJob, text, 1.0, voice.sid, key);

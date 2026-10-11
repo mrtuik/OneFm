@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
@@ -18,6 +18,7 @@ import Chat from './screens/Chat';
 import { AppHeader } from './components/AppHeader';
 import { TabBar } from './components/TabBar';
 import { colors } from './theme';
+import { warmVoice } from './voice/engine';
 import type { User } from './firebase/auth';
 
 const Stack = createNativeStackNavigator();
@@ -45,6 +46,9 @@ function Tabs({ user }: { user: User | null }) {
 function Root() {
   const { s, loaded } = useSettings();
   const { user, ready } = useAuthUser();
+
+  // Load the voice model while the app opens: it takes several seconds, so the first message does not wait for it.
+  useEffect(() => { if (loaded && s.language) warmVoice(s.language, s.voices[s.language]); }, [loaded, s.language]);
 
   if (!loaded || !ready) {
     return (

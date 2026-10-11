@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '../theme';
 import { Lang } from '../types';
-import { downloadVoice, estimateSeconds, getVoiceError, resolveVoice, speak, stopSpeaking, subscribePlaying, subscribeVoiceError } from '../voice/engine';
+import { downloadVoice, estimateSeconds, getVoiceError, getVoiceInfo, resolveVoice, speak, stopSpeaking, subscribePlaying, subscribeVoiceError } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
 
 const BARS = [6, 12, 8, 16, 10, 14, 6, 12, 18, 9, 13, 7, 15, 10, 6, 12, 17, 8, 11, 14, 7, 10, 16, 9];
@@ -19,7 +19,8 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
   const total = estimateSeconds(text);
   const started = useRef(0);
   const [err, setErr] = useState<string | null>(getVoiceError(id));
-  useEffect(() => { const f = () => setErr(getVoiceError(id)); f(); return subscribeVoiceError(f); }, [id]);
+  const [info, setInfo] = useState<string | null>(getVoiceInfo(id));
+  useEffect(() => { const f = () => { setErr(getVoiceError(id)); setInfo(getVoiceInfo(id)); }; f(); return subscribeVoiceError(f); }, [id]);
 
   useEffect(() => subscribePlaying((p) => { setPlaying(p.id === id && !p.loading); setPreparing(p.id === id && p.loading); }), [id]);
 
@@ -62,7 +63,7 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
         </View>
         <Text style={s.time}>{fmt(playing ? Math.round(progress * total) : total)}</Text>
       </Pressable>
-      {err ? <Text style={s.err}>{err}</Text> : null}
+      {err ? <Text style={s.err}>{err}</Text> : info ? <Text style={s.info}>{info}</Text> : null}
     </View>
   );
 }
@@ -73,5 +74,6 @@ const s = StyleSheet.create({
   wave: { flexDirection: 'row', alignItems: 'center', gap: 2.5, height: 20 },
   time: { color: colors.sub, fontSize: 12, fontVariant: ['tabular-nums'] },
   missing: { color: colors.sub, fontSize: 13, flexShrink: 1 },
+  info: { color: colors.sub, fontSize: 11, marginTop: 6, lineHeight: 15 },
   err: { color: colors.accent, fontSize: 12, marginTop: 6, lineHeight: 17 },
 });
