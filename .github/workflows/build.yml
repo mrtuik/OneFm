@@ -58,8 +58,21 @@ jobs:
 
       # Aligns every Expo package (expo-font, expo-notifications, icons...) to the exact
       # versions this Expo SDK expects. Mismatched native versions crash the app at launch.
+      # expo-font is not in package.json (npm pulls it in as a peer of the icon library, at the
+      # newest version), so --fix alone never checks it. Install it explicitly at the SDK version.
       - name: Align Expo package versions
-        run: npx expo install --fix
+        run: |
+          npx expo install expo-font
+          npx expo install --fix
+
+      - name: Show resolved Expo versions
+        run: |
+          {
+            echo '### Resolved versions'
+            echo '```'
+            npm ls expo expo-font expo-modules-core expo-notifications @expo/vector-icons 2>&1 | head -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Typecheck
         run: npm run typecheck
