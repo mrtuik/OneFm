@@ -1,5 +1,7 @@
 import { ChatMessage, ChatState, Character, Fact, Lang, Story } from '../types';
 import { LlmMessage } from './provider';
+import { isYou } from '../chat/roles';
+import { cleanSpeech } from '../format';
 
 export const DEFAULT_MESSAGE_LIMIT = 40;
 /** Replies that claim the episode is done before this many messages are ignored. */
@@ -7,9 +9,9 @@ export const MIN_EPISODE_MESSAGES = 6;
 const HISTORY_LIMIT = 14;
 
 const LANGUAGE_RULE: Record<Lang, string> = {
-  en: 'Language: natural, simple Indian English. speech_text is the same text in plain English.',
-  bn: 'Language: Banglish, which is Bangla written in English letters, the way people text. display_text must be in English letters only. speech_text must be the same content written in Bengali script (বাংলা) so a voice can read it correctly.',
-  hi: 'Language: Hinglish, which is Hindi written in English letters, the way people text. display_text must be in English letters only. speech_text must be the same content written in Devanagari script (हिन्दी) so a voice can read it correctly.',
+  en: 'Language: natural, simple Indian English for narration and dialogue. speech_text is the same text in plain English.',
+  bn: 'Language: Banglish, which is Bangla written in English letters, the way people text. The narration is Banglish too, never English sentences. display_text must be in English letters only. speech_text must be the same content written in Bengali script (বাংলা) so a voice can read it correctly.',
+  hi: 'Language: Hinglish, which is Hindi written in English letters, the way people text. The narration is Hinglish too, never English sentences (write "Dhoop chai ki tapri par pad rahi thi", not "The sun fell on the tapri"). display_text must be in English letters only. speech_text must be the same content written in Devanagari script (हिन्दी) so a voice can read it correctly.',
 };
 
 /**
@@ -18,17 +20,22 @@ const LANGUAGE_RULE: Record<Lang, string> = {
  * are sent in the second system message (see storyBible and memoryBlock).
  */
 export function masterPrompt(lang: Lang): string {
-  return `You are the narrator and all characters in an interactive story. The user plays the protagonist (say "you" in narration).
+  return `You are the narrator and every character in an interactive story, except the one role the user plays (see ROLES in the story message). In narration the user's role is "you" (tum / tumi).
 
 # HOW TO WRITE
-1. Format every reply as a short narration line in *italics*, then character dialogue in quotes. Example:
+1. Write like a story chat: several short paragraphs separated by a blank line. A narration paragraph is wrapped in one pair of asterisks, *like this*. A dialogue line is written as Name: "words". More than one character can speak in one reply. Example:
    *Meera clutches her notebook tighter, eyes on the door.*
-   "Tum yahan kya kar rahe ho?"
-2. Keep replies 2 to 5 short lines (about 40 to 110 words). Never write a wall of text.
+
+   Meera: "Tum yahan kya kar rahe ho?"
+
+   *Arjun shrugs, a half smile on his face.*
+
+   Arjun: "Seat tumhari hai kya?"
+2. Write 4 to 8 short paragraphs (about 90 to 170 words), each with at most two sentences. Never write a wall of text.
 3. Show, don't tell. Use body language, objects, small actions and silence instead of stating emotions.
 4. Give each character a distinct voice that matches their language_style and speech_habits. Never make characters sound the same.
 5. Add subtext. Characters often say one thing and mean another.
-6. Never speak or act for the user. Never decide the user's feelings or choices.
+6. Never write dialogue, actions or feelings for the user's role. Never decide the user's choices. Only the other characters and the narration move.
 7. Move the story forward every reply: reveal something, raise a stake, or create a small choice. No filler.
 8. Do not repeat phrases, openings or gestures used in the last 10 replies.
 9. End most replies with a hook: a question, a surprise, an unfinished action, or a clear choice.
@@ -53,12 +60,12 @@ ${LANGUAGE_RULE[lang]} Match the user's language and script.
 # OUTPUT FORMAT
 Reply with ONE JSON object and nothing else, no markdown fences:
 {"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false}
-- speech_text: the same content as display_text, without asterisks or stage directions, written so it sounds natural when read aloud.
+- speech_text: the same content as display_text in the same order, without asterisks, quotation marks, speaker labels (no "Name:"), brackets, emoji or any symbol, written so it sounds natural when read aloud. Only plain words with commas and full stops.
 - choices: 0 to 3 short ideas for what the user could do or say next. Use [] when not needed.`;
 }
 
 function characterCard(c: Character): string {
-  const lines = [`- ${c.name}${c.age ? ` (${c.age})` : ''}: ${c.role}`];
+  const lines = [`- ${c.name}${c.age ? ` (${c.age})` : ''}${c.gender ? `, ${c.gender}` : ''}: ${c.role}`];
   if (c.appearance) lines.push(`  appearance: ${c.appearance}`);
   if (c.personality?.length) lines.push(`  personality: ${c.personality.join(', ')}`);
   if (c.languageStyle) lines.push(`  language_style: ${c.languageStyle}`);
@@ -129,7 +136,22 @@ function asHistory(m: ChatMessage): LlmMessage | null {
   return { role: 'assistant', content: JSON.stringify({ speaker: m.speaker ?? 'Narrator', display_text: m.text, speech_text: m.speech ?? m.text, choices: [], episode_complete: false }) };
 }
 
-export type TurnMode = 'turn' | 'begin' | 'close';
+export type TurnMode = 'turn' | 'begin' | 'close' | 'advance';
+
+function rolesBlock(story: Story, chat: ChatState): string {
+  const lines = ['ROLES'];
+  if (isYou(chat.userRole)) {
+    lines.push('The user plays the main character of the story, the unnamed "you" of the narration.');
+  } else {
+    const c = story.characters.find((x) => x.name === chat.userRole);
+    lines.push(`The user plays ${chat.userRole}${c ? ` (${c.role})` : ''}. In narration this role is "you". Never write lines or actions for ${chat.userRole}.`);
+    lines.push('If the story bible has an unnamed main character ("you") that the user is not playing, that person is now a normal character played by you. Give them a fitting name from the story.');
+  }
+  if (chat.userGender) lines.push(`The user is ${chat.userGender}. When you address the user's role, use ${chat.userGender} grammar and forms.`);
+  const others = story.characters.filter((c) => c.name !== chat.userRole).map((c) => c.name);
+  if (others.length) lines.push(`You play: ${others.join(', ')}, plus anyone else the scene needs.`);
+  return lines.join('\n');
+}
 
 export function buildTurnMessages(story: Story, chat: ChatState, finalUser: string, history: ChatMessage[], mode: TurnMode): LlmMessage[] {
   const goal = episodeGoal(story, chat.ep);
@@ -137,20 +159,21 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
   const direction = [`CURRENT EPISODE: ${chat.ep}`, `Goal: ${goal}`, `Messages used: ${chat.epCount} of ${limit}`].join('\n');
 
   const notes: string[] = [];
-  if (chat.character) notes.push(`The user is currently talking to ${chat.character}.`);
+  if (!chat.userRole && chat.character) notes.push(`The user is currently talking to ${chat.character}.`);
   if (mode === 'begin') {
     notes.push(chat.ep === 1
       ? 'Begin episode 1 now. Set the scene and introduce the first character. Do not wait for the user.'
       : `Begin episode ${chat.ep} now. Open directly from the suspense hook the previous episode ended on.`);
   }
-  if (mode === 'close') notes.push('The episode message limit is reached. Write the closing beat now, end on a suspense hook, and set episode_complete to true.');
+  if (mode === 'advance') notes.push('The user tapped Next without writing anything. Continue the scene with the next story beat: the other characters act and speak, the plot moves one step. Write nothing for the user\'s role.');
+  if (mode === 'close') notes.push('This episode must end now (the message limit is reached or the user chose the next episode). Write the closing beat, end on a suspense hook, and set episode_complete to true.');
 
   const last = notes.length ? `${finalUser}\n\n[Director note, not part of the story: ${notes.join(' ')}]` : finalUser;
   const hist = history.map(asHistory).filter((x): x is LlmMessage => !!x).slice(-HISTORY_LIMIT);
 
   return [
     { role: 'system', content: masterPrompt(story.language) },
-    { role: 'system', content: `${storyBible(story)}\n\n${memoryBlock(chat, finalUser)}\n\n${direction}` },
+    { role: 'system', content: `${storyBible(story)}\n\n${rolesBlock(story, chat)}\n\n${memoryBlock(chat, finalUser)}\n\n${direction}` },
     ...hist,
     { role: 'user', content: last },
   ];
@@ -176,7 +199,7 @@ export function parseReply(raw: string): Reply | null {
     return {
       speaker: typeof j.speaker === 'string' && j.speaker.trim() ? j.speaker.trim() : 'Narrator',
       display_text: display,
-      speech_text: typeof j.speech_text === 'string' && j.speech_text.trim() ? j.speech_text.trim() : display.replace(/\*/g, ''),
+      speech_text: cleanSpeech(typeof j.speech_text === 'string' && j.speech_text.trim() ? j.speech_text : display) || display.replace(/\*/g, ''),
       choices: Array.isArray(j.choices) ? j.choices.filter((c: unknown) => typeof c === 'string' && c.trim()).slice(0, 3) : [],
       episode_complete: j.episode_complete === true,
     };

@@ -4,6 +4,8 @@ export const colors = {
   surface: '#171313',
   text: '#FEF4F4',
   sub: '#B5A8A8',
+  /** Narration lines in the story chat: light gray. */
+  narration: '#9C9CA3',
   accent: '#E31A4E',
   onAccent: '#FFFFFF',
   line: 'rgba(254,244,244,0.12)',

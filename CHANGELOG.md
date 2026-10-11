@@ -1,5 +1,15 @@
 # One Fm changelog
 
+## V6
+- Roles: you play ONE role and the story plays everybody else (like Kavana). A new chat first asks "Who do you want to play?". The list has "You (main character)" and every character that fits your gender. Gender is set in Profile > I am (the picker also has Male / Female buttons). Tap your role chip in the composer, or menu > Change my role, to switch.
+- Story chat is now paragraph style like Kavana: several short paragraphs, narration in light gray italics, dialogue in white with the speaker name in bold, several characters can speak in one reply.
+- Narration is written in the story language too (Hinglish for Hindi stories, Banglish for Bangla stories), not English.
+- New buttons under the last reply: Next (the story moves on without you typing), Retry (regenerate), Next episode (closes the episode with a closing scene). Menu also has Next episode. Retry now replaces only the last reply.
+- Composer and suggestion chips have no outline any more. The pink focus outline is gone.
+- Keyboard gap fixed: KeyboardAvoidingView is replaced by a small hook that adds space only while the keyboard is open, so no empty gap stays under the composer after it closes.
+- Voice text is cleaned before speaking: markdown, symbols, quotes, brackets, emoji and speaker labels are removed, ? and ! become a full stop. The voice engine itself is unchanged.
+- Character has an optional `gender` field; sample stories have it. Stories already in the database get it filled from the bundled samples by story id and character name.
+
 ## V5
 - Voice rebuilt on a local native module (`modules/onefm-voice`) ported from SHEETMD's working `sheet-tts`. The `react-native-sherpa-onnx` library and its two peer packages are removed: its download manager failed on the phone ("Download failed") and its codegen broke the CMake step. Download uses expo-file-system, unpacking is done natively, playback streams into an AudioTrack. Error messages now show the real reason.
 - Build workflow downloads the sherpa-onnx native libraries (v1.13.8, arm64) and verifies the voice model links. The V4.2 codegen step is removed.

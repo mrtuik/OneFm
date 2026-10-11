@@ -2,11 +2,17 @@ export type Lang = 'en' | 'bn' | 'hi';
 export const LANG_LABEL: Record<Lang, string> = { en: 'English', bn: 'Bangla', hi: 'Hindi' };
 export const LANGS: Lang[] = ['en', 'bn', 'hi'];
 
+/** Who the reader is. A male reader plays male roles, a female reader plays female roles. Set in Profile. */
+export type Gender = 'male' | 'female';
+export const GENDER_LABEL: Record<Gender, string> = { male: 'Male', female: 'Female' };
+
 /** Name and role are required. The other fields come from the story_engine_guide character card and are optional. */
 export interface Character {
   name: string;
   role: string;
   age?: number;
+  /** Roles without a gender can be played by anyone. */
+  gender?: Gender;
   appearance?: string;
   personality?: string[];
   languageStyle?: string;
@@ -75,6 +81,11 @@ export interface ChatState {
   episodeSummaries: EpisodeSummary[];
   rollingSummary: string;
   facts: Fact[];
+  /** Old field: who the reader was talking to (V5 and earlier). Not used for new chats. */
   character?: string;
+  /** The role the reader plays. 'You' means the unnamed main character. The AI plays every other role. */
+  userRole?: string;
+  /** Gender of the reader when the role was chosen. The AI uses it for Hindi grammar (gaya / gayi). */
+  userGender?: Gender;
   updatedAt: number;
 }

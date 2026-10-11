@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
 import { UserAvatar } from '../components/UserAvatar';
 import { colors, radius, space } from '../theme';
-import { LANGS, LANG_LABEL, Lang } from '../types';
+import { GENDER_LABEL, Gender, LANGS, LANG_LABEL, Lang } from '../types';
 import { TextSize, useSettings } from '../state/settings';
 import { logout, useAuthUser } from '../firebase/auth';
 import { seedStories } from '../firebase/db';
@@ -142,6 +142,12 @@ export default function Profile() {
       <Section title="Reading language" hint="Stories are shown in this language.">
         <View style={s.row}>
           {LANGS.map((l) => <Chip key={l} label={LANG_LABEL[l]} active={l === lang} onPress={() => update({ language: l })} />)}
+        </View>
+      </Section>
+
+      <Section title="I am" hint="You play roles that match you. A male reader plays male roles, a female reader plays female roles.">
+        <View style={s.row}>
+          {(['male', 'female'] as Gender[]).map((g) => <Chip key={g} label={GENDER_LABEL[g]} active={st.gender === g} onPress={() => update({ gender: g })} />)}
         </View>
       </Section>
 

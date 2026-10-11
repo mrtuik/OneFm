@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Lang } from '../types';
+import { Gender, Lang } from '../types';
 import { DEFAULT_PROVIDER, ProviderSettings, migrateProvider } from '../ai/provider';
 
 export type TextSize = 'small' | 'medium' | 'large';
@@ -9,6 +9,8 @@ export interface Settings {
   ageConfirmed: boolean;
   guest: boolean;
   language: Lang | null;
+  /** Reader gender, decides which roles can be played. null = not chosen yet. */
+  gender: Gender | null;
   /** Chosen system voice id per reading language. Empty means the device default. */
   voices: Partial<Record<Lang, string>>;
   autoPlay: boolean;
@@ -16,7 +18,7 @@ export interface Settings {
   provider: ProviderSettings;
 }
 const DEFAULT: Settings = {
-  ageConfirmed: false, guest: false, language: null,
+  ageConfirmed: false, guest: false, language: null, gender: null,
   voices: {}, autoPlay: true, textSize: 'medium', provider: DEFAULT_PROVIDER,
 };
 const KEY = 'onefm.settings.v1';
