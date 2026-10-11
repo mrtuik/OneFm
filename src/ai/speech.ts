@@ -81,7 +81,35 @@ export function splitForSpeech(source: string): string[] {
   return parts.length ? parts : [source];
 }
 
+// Google Input Tools: the same service behind Google's Bangla/Hindi typing keyboards. It turns Latin letters
+// (Banglish, Hinglish) into native script word by word, in a fraction of a second, with no API key.
+// It is an unofficial endpoint, so any failure just falls through to the AI conversion below.
+const ITC: Record<'hi' | 'bn', string> = { hi: 'hi-t-i0-und', bn: 'bn-t-i0-und' };
+
+async function googleTransliterate(lang: 'hi' | 'bn', text: string): Promise<string> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const url = `https://inputtools.google.com/request?text=${encodeURIComponent(text)}&itc=${ITC[lang]}&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=demopage`;
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) return '';
+    const j: any = await r.json();
+    if (!Array.isArray(j) || j[0] !== 'SUCCESS' || !Array.isArray(j[1])) return '';
+    return (j[1] as any[])
+      .map((it) => String(it?.[1]?.[0] ?? it?.[0] ?? ''))
+      .join(' ')
+      .replace(/\s+([,.!?\u0964])/g, '$1')
+      .trim();
+  } catch {
+    return '';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function convertPart(lang: 'hi' | 'bn', seg: string, cfg: ProviderSettings, key: string): Promise<string> {
+  const quick = cleanSpeech(await googleTransliterate(lang, seg));
+  if (quick && covers(seg, quick) && latinShare(quick) < 0.1) return quick;
   let best = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     const out = await chatCompletion({

@@ -413,7 +413,9 @@ class OneFmVoiceModule : Module() {
                   for (c in parts) for (v in c) { mags[mi++] = if (v < 0f) -v else v }
                   java.util.Arrays.sort(mags)
                   val level = mags[(total * 0.999).toInt().coerceAtMost(total - 1)]
-                  val g = if (level >= 0.002f && level < 0.8f) (0.8f / level).coerceAtMost(40f) else 1f
+                  // Never lift past full scale: a gain that clips the loudest samples makes clicks and distortion.
+                  val loudest = mags[total - 1]
+                  val g = if (level >= 0.002f && level < 0.8f) minOf(0.8f / level, 0.97f / maxOf(loudest, 0.0001f)).coerceIn(1f, 40f) else 1f
                   for (c in parts) {
                     if (g != 1f) for (i in c.indices) c[i] = (c[i] * g).coerceIn(-1f, 1f)
                     for (v in c) { val av = if (v < 0f) -v else v; if (av > peak) peak = av }

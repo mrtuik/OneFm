@@ -297,7 +297,8 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string, ke
   }
   emit({ id, loading: !keepParts });
 
-  const key = cacheKeyOf(voice.id, text);
+  // A Profile preview is never saved or replayed from a file: it always goes through the live path that plays in chat.
+  const key = id.startsWith('preview:') ? '' : cacheKeyOf(voice.id, text);
   (async () => {
     // A message that was played before is saved as audio: no model needed, it starts at once.
     let cached = false;

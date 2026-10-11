@@ -1,6 +1,9 @@
 # One Fm changelog
 
 ## V6.9.1
+- Profile preview is no longer saved or replayed from a file. It is always generated live, the same path that plays in chat, so the numbers line shows real generation time.
+- The volume lift never pushes the loudest sample past full scale any more (before, a 40x lift could clip it into clicks).
+- Voice text conversion first tries Google Input Tools (the engine behind Google's Bangla/Hindi keyboards): Banglish or Hinglish becomes native script in a fraction of a second, no API key. If it fails or the result still has English letters, the AI conversion runs as before.
 - Voice start in chat: when the voice text must be converted to Bangla/Hindi script, the message is now cut into parts. Part 1 (about 60 to 110 characters) is converted and spoken first, the other parts are converted at the same time and play one after another. Before, the voice waited for the whole message to be converted (one or two big AI calls).
 - Profile preview and replays: a saved (cached) voice file is now read whole and levelled to a clear volume before it plays, and the cache key is bumped (v4) so any quiet or silent file saved by an older build is ignored. Replays also show the numbers line under the voice. Before, a replay showed the stop icon but played almost nothing, with no error.
 - Build summary now prints the SHA-1 and SHA-256 with apksigner (keytool printed "Not a signed jar file" for this APK).
