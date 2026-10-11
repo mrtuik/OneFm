@@ -5,7 +5,6 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { SettingsProvider, useSettings } from './state/settings';
 import { useAuthUser } from './firebase/auth';
 import { AgeScreen, LanguageScreen, LoginScreen } from './screens/Onboarding';
@@ -15,33 +14,23 @@ import StoryDetail from './screens/StoryDetail';
 import Profile from './screens/Profile';
 import { Chats, Community, Library } from './screens/Stubs';
 import { AppHeader } from './components/AppHeader';
+import { TabBar } from './components/TabBar';
 import { colors } from './theme';
+import type { User } from './firebase/auth';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const theme = {
   ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: 'rgba(255,255,255,0.08)', primary: colors.accent },
+  colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: colors.line, primary: colors.accent },
 };
 
-const tabIcon: Record<string, [any, any]> = {
-  Home: ['home', 'home-outline'],
-  Search: ['search', 'search-outline'],
-  Chats: ['chatbubbles', 'chatbubbles-outline'],
-  Community: ['people', 'people-outline'],
-};
-
-function Tabs() {
+function Tabs({ user }: { user: User | null }) {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        header: () => <AppHeader />,
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.sub,
-        tabBarStyle: { backgroundColor: colors.bg, borderTopColor: 'rgba(255,255,255,0.08)' },
-        tabBarIcon: ({ color, focused, size }) => <Ionicons name={tabIcon[route.name][focused ? 0 : 1]} size={size} color={color} />,
-      })}
+      tabBar={(props) => <TabBar {...props} user={user} />}
+      screenOptions={{ header: () => <AppHeader /> }}
     >
       <Tab.Screen name="Home" component={Home} />
       <Tab.Screen name="Search" component={Search} />
@@ -69,7 +58,9 @@ function Root() {
   return (
     <NavigationContainer theme={theme}>
       <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.text, contentStyle: { backgroundColor: colors.bg } }}>
-        <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Tabs" options={{ headerShown: false }}>
+          {() => <Tabs user={user} />}
+        </Stack.Screen>
         <Stack.Screen name="StoryDetail" component={StoryDetail} options={{ title: '', presentation: 'modal' }} />
         <Stack.Screen name="Profile" component={Profile} />
         <Stack.Screen name="Library" component={Library} />

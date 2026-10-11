@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Logo } from '../components/Logo';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
-import { colors } from '../theme';
+import { colors, space } from '../theme';
 import { LANGS, LANG_LABEL, Lang, VOICES } from '../types';
 import { useSettings } from '../state/settings';
 import { emailSignIn, emailSignUp, friendlyAuthError, googleSignIn } from '../firebase/auth';
@@ -13,7 +13,7 @@ function Frame({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: space.screen + 8, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
         {children}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -41,7 +41,7 @@ export function AgeScreen() {
           <View style={[s.box, ok && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
             {ok ? <Ionicons name="checkmark" size={18} color={colors.onAccent} /> : null}
           </View>
-          <Text style={s.checkText}>Ami confirm korchi amar boyosh 18 ba tar beshi.</Text>
+          <Text style={s.checkText}>I confirm that I am 18 years old or older.</Text>
         </Pressable>
         <GradientButton title="Continue" disabled={!ok} onPress={() => update({ ageConfirmed: true })} />
       </View>
@@ -64,7 +64,7 @@ export function LoginScreen() {
 
   return (
     <Frame>
-      <Hero line="Login koro, na hole guest hoye ghure dekho." />
+      <Hero line="Sign in, or look around as a guest." />
       <View style={{ gap: 12 }}>
         <TextInput style={s.input} placeholder="Email" placeholderTextColor={colors.sub} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
         <TextInput style={s.input} placeholder="Password" placeholderTextColor={colors.sub} secureTextEntry value={pw} onChangeText={setPw} />
@@ -77,7 +77,7 @@ export function LoginScreen() {
           </>
         )}
         <Pressable onPress={() => update({ guest: true })} style={{ alignSelf: 'center', padding: 12 }}>
-          <Text style={{ color: colors.sub, fontSize: 14 }}>Guest hishebe dhukbo</Text>
+          <Text style={{ color: colors.sub, fontSize: 14 }}>Continue as guest</Text>
         </Pressable>
       </View>
     </Frame>
@@ -91,7 +91,7 @@ export function LanguageScreen() {
   const voices = VOICES[lang];
   return (
     <Frame>
-      <Hero line="Kon bhashay pochhondo? Ta ekhon thikh kore nao, pore Profile e bodlano jabe." />
+      <Hero line="Which language do you prefer? Pick one now, you can change it later in Profile." />
       <View style={{ flex: 1, justifyContent: 'flex-end', gap: 20 }}>
         <View style={{ gap: 10 }}>
           <Text style={s.label}>Reading language</Text>
@@ -119,7 +119,7 @@ const s = StyleSheet.create({
   hero: { alignItems: 'center', marginTop: 40, marginBottom: 48, gap: 14 },
   brand: { color: colors.text, fontSize: 34, fontWeight: '800' },
   line: { color: colors.sub, fontSize: 15, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
-  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line },
+  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: space.card, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line },
   box: { width: 24, height: 24, borderRadius: 7, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   checkText: { color: colors.text, fontSize: 15, flex: 1, lineHeight: 21 },
   input: { height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 16, color: colors.text, fontSize: 16 },

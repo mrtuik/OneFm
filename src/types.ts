@@ -1,5 +1,5 @@
 export type Lang = 'en' | 'bn' | 'hi';
-export const LANG_LABEL: Record<Lang, string> = { en: 'English', bn: 'Banglish', hi: 'Hinglish' };
+export const LANG_LABEL: Record<Lang, string> = { en: 'English', bn: 'Bangla', hi: 'Hindi' };
 export const LANGS: Lang[] = ['en', 'bn', 'hi'];
 
 export const VOICES: Record<Lang, string[]> = {

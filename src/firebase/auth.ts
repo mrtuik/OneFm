@@ -45,11 +45,11 @@ export async function googleSignIn() {
 export function friendlyAuthError(e: any): string {
   const code: string = e?.code ?? '';
   if (e?.message === 'cancelled') return '';
-  if (code.includes('invalid-email')) return 'Email ta thik na.';
-  if (code.includes('weak-password')) return 'Password kom kore 6 character dao.';
-  if (code.includes('email-already-in-use')) return 'Ei email e age thekei account ache. Sign in koro.';
+  if (code.includes('invalid-email')) return 'That email address is not valid.';
+  if (code.includes('weak-password')) return 'Use a password with at least 6 characters.';
+  if (code.includes('email-already-in-use')) return 'An account with this email already exists. Please sign in.';
   if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found'))
-    return 'Email ba password mile ni.';
-  if (code.includes('network')) return 'Internet connection check koro.';
-  return 'Kichu ekta gondogol hoyeche. Abar try koro. ' + (code ? `(${code})` : '');
+    return 'The email or password is incorrect.';
+  if (code.includes('network')) return 'Please check your internet connection.';
+  return 'Something went wrong. Please try again. ' + (code ? `(${code})` : '');
 }

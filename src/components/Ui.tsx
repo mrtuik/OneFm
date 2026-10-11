@@ -25,7 +25,7 @@ export function OutlineButton({ title, onPress, style, icon }: { title: string; 
 
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[s.chip, active && { borderColor: colors.accent, backgroundColor: 'rgba(255,93,122,0.12)' }]}>
+    <Pressable onPress={onPress} style={[s.chip, active && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}>
       <Text style={[s.chipText, active && { color: colors.accent }]}>{label}</Text>
     </Pressable>
   );

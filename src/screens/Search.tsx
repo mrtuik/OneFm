@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StoryCard } from '../components/StoryCard';
 import { Chip, Empty } from '../components/Ui';
-import { colors } from '../theme';
+import { colors, space } from '../theme';
 import { GENRES, LANGS, LANG_LABEL, Lang, Story } from '../types';
 import { fetchStories } from '../firebase/db';
 
@@ -26,21 +26,21 @@ export default function Search() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ padding: 16, gap: 12 }}>
-        <TextInput style={s.input} placeholder="Story ba character khojo" placeholderTextColor={colors.sub} value={q} onChangeText={setQ} />
+      <View style={{ padding: space.screen, gap: space.gap }}>
+        <TextInput style={s.input} placeholder="Search stories or characters" placeholderTextColor={colors.sub} value={q} onChangeText={setQ} />
         <FlatList horizontal showsHorizontalScrollIndicator={false} data={GENRES} keyExtractor={(g) => g} contentContainerStyle={{ gap: 8 }}
           renderItem={({ item }) => <Chip label={item} active={genre === item} onPress={() => setGenre(genre === item ? null : item)} />} />
         <FlatList horizontal showsHorizontalScrollIndicator={false} data={LANGS} keyExtractor={(g) => g} contentContainerStyle={{ gap: 8 }}
           renderItem={({ item }) => <Chip label={LANG_LABEL[item]} active={lang === item} onPress={() => setLang(lang === item ? null : item)} />} />
       </View>
-      {results.length === 0 ? <Empty title="Kichu pawa jay ni" body="Onno kono shobdo ba filter diye dekho." /> : (
-        <FlatList data={results} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: 16, gap: 14 }}
-          renderItem={({ item }) => <StoryCard story={item} width="100%" height={200} onPress={() => nav.navigate('StoryDetail', { story: item })} />} />
+      {results.length === 0 ? <Empty title="No results found" body="Try a different word or filter." /> : (
+        <FlatList data={results} keyExtractor={(i) => i.id} contentContainerStyle={{ paddingHorizontal: space.screen, paddingBottom: space.section, gap: space.gap }}
+          renderItem={({ item }) => <StoryCard story={item} variant="row" onPress={() => nav.navigate('StoryDetail', { story: item })} />} />
       )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  input: { height: 48, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 16, color: colors.text, fontSize: 16 },
+  input: { height: 48, borderRadius: 16, backgroundColor: colors.surface, paddingHorizontal: space.card, color: colors.text, fontSize: 16 },
 });
