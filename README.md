@@ -6,7 +6,7 @@ Package: `com.onefm.tuik`. Expo Go kora jabe na, dev build lagbe.
 ## Local run
 ```
 npm install
-npx expo install --fix        # SDK version gulo mildhe nebe
+npx expo install --fix        # SDK version gulo mildhe nebe (CI o eta chalay)
 npx expo prebuild --platform android
 npx expo run:android
 ```

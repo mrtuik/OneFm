@@ -56,6 +56,11 @@ jobs:
 
       - run: npm install --no-audit --no-fund
 
+      # Aligns every Expo package (expo-font, expo-notifications, icons...) to the exact
+      # versions this Expo SDK expects. Mismatched native versions crash the app at launch.
+      - name: Align Expo package versions
+        run: npx expo install --fix
+
       - name: Typecheck
         run: npm run typecheck
         continue-on-error: true

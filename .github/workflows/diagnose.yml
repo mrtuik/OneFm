@@ -42,6 +42,11 @@ jobs:
           restore-keys: gradle-x86-
 
       - run: npm install --no-audit --no-fund
+
+      # Aligns every Expo package (expo-font, expo-notifications, icons...) to the exact
+      # versions this Expo SDK expects. Mismatched native versions crash the app at launch.
+      - name: Align Expo package versions
+        run: npx expo install --fix
       - run: npx expo prebuild --platform android --no-install
 
       # x86_64 build, because the emulator on the runner is x86_64.
