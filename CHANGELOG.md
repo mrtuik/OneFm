@@ -1,12 +1,10 @@
 # One Fm changelog
 
 ## V6.9
-- Voice fixed, taken from how SHEETMD speaks: new "Phone voice (Google)" for Bangla, Hindi and English. It uses the phone's own text-to-speech (expo-speech), needs no download, and is the default for Bangla and Hindi. Old saved Bangla and Hindi voice choices are reset once so the silent sherpa voice is no longer selected.
-- If a downloaded sherpa voice makes no sound, fails, or cannot start, the same message is read at once by the phone voice instead of staying silent. (Only "media volume is 0" is still shown as a message.)
-- Louder sound: the sherpa player now uses the phone's LoudnessEnhancer (+10 dB, same as SHEETMD) so quiet voices are clearly audible at normal volume. Text is also cut at the Bangla danda, ? and !, so playback starts sooner.
-- No outlines anywhere: buttons, chips, voice chip, your message card, composer chip, Profile voice rows and fields, age check, story page and the tab bar avatar ring are soft filled shapes now. Selected items use a pink tint instead of a border. The header divider line is gone.
-- App icon: the pen is smaller on a full black fill (launcher icon and adaptive icon).
-- New: expo-speech dependency and the withTtsQueries plugin (Android 11+ needs it to see Google Speech Services).
+- Voice (sherpa-onnx only, no fallback of any kind): Bangla model output is very quiet. Every generated sentence is now lifted to a clear level (99.9th percentile to 0.8, max 40x) before it plays and is saved. Old saved audio is ignored (new cache key). Text is also cut at the Bangla danda, so playback starts sooner.
+- Profile > Voice: a preview that fails now shows the real reason under the voice name (before, Profile showed nothing).
+- No outlines anywhere: buttons, chips, voice chip, your message card, composer chip, Profile voice rows and fields, age check, story page and the tab bar avatar ring are soft filled shapes. Selected items use a pink tint. The header divider line is gone.
+- App icon: the pen is smaller on a full black fill (launcher and adaptive icon).
 
 ## V6.8.1
 - App icon: the pen is bigger in the launcher icon (adaptive and legacy), so the icon looks full.

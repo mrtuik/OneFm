@@ -1,6 +1,5 @@
 import * as FS from 'expo-file-system/legacy';
 import { requireNativeModule } from 'expo';
-import * as Speech from 'expo-speech';
 import { Lang } from '../types';
 
 /**
@@ -27,16 +26,9 @@ export const voiceUrl = (id: string) => `${RELEASE}/${id}.tar.bz2`;
 
 // First voice of each language is the default. Hindi and Bangla voices are trained on native script,
 // which is why every AI reply carries a speech_text field in Devanagari or Bengali script.
-/** The phone's own text-to-speech (Google Speech Services). Same engine SHEETMD uses for Bangla. No download. */
-export const PHONE_ID = 'phone';
-export const isPhoneVoice = (id: string) => id === PHONE_ID;
-
 export const VOICES: VoiceInfo[] = [
-  { id: PHONE_ID, name: 'Phone voice (Google)', lang: 'bn', sizeMB: 0, sid: 0 },
-  { id: PHONE_ID, name: 'Phone voice (Google)', lang: 'hi', sizeMB: 0, sid: 0 },
   { id: 'vits-piper-en_US-lessac-medium', name: 'Lessac (female)', lang: 'en', sizeMB: 64, sid: 0 },
   { id: 'vits-piper-en_US-ryan-medium', name: 'Ryan (male)', lang: 'en', sizeMB: 64, sid: 0 },
-  { id: PHONE_ID, name: 'Phone voice (Google)', lang: 'en', sizeMB: 0, sid: 0 },
   { id: 'vits-piper-hi_IN-priyamvada-medium', name: 'Priyamvada (female)', lang: 'hi', sizeMB: 64, sid: 0 },
   { id: 'vits-piper-hi_IN-pratham-medium', name: 'Pratham (male)', lang: 'hi', sizeMB: 64, sid: 0 },
   { id: 'vits-piper-hi_IN-rohan-medium', name: 'Rohan (male)', lang: 'hi', sizeMB: 64, sid: 0 },
@@ -81,7 +73,6 @@ const existsOnDisk = async (id: string): Promise<boolean> => {
 
 /** Looks on disk and updates the status. Safe to call often. */
 export async function refreshVoiceStatus(id: string): Promise<VoiceStatus> {
-  if (isPhoneVoice(id)) { if (getVoiceStatus(id).state !== 'ready') setStatus(id, { state: 'ready', percent: 100 }); return getVoiceStatus(id); }
   if (getVoiceStatus(id).state === 'downloading') return getVoiceStatus(id);
   const ok = await existsOnDisk(id);
   const prev = getVoiceStatus(id);
@@ -97,7 +88,6 @@ export async function isVoiceReady(lang: Lang, voiceId?: string): Promise<boolea
 const fail = (id: string, msg: string) => { setStatus(id, { state: 'missing', percent: 0, error: msg }); return false; };
 
 export async function downloadVoice(id: string): Promise<boolean> {
-  if (isPhoneVoice(id)) return true;
   if (getVoiceStatus(id).state === 'downloading') return false;
   if (!Native?.extractTarBz2) return fail(id, 'This build has no voice engine. Install the latest APK.');
   const v = VOICES.find((x) => x.id === id);
@@ -150,7 +140,6 @@ export async function downloadVoice(id: string): Promise<boolean> {
 }
 
 export async function removeVoice(id: string) {
-  if (isPhoneVoice(id)) return;
   if (loadedId === id) { loadedId = null; try { Native?.release(); } catch { /* ignore */ } }
   await FS.deleteAsync(dirOf(id), { idempotent: true }).catch(() => {});
   setStatus(id, { state: 'missing', percent: 0 });
@@ -189,8 +178,6 @@ const idle = () => emit({ id: null, loading: false });
 // ---- Voice problem shown under the voice chip of the message that failed ----
 let voiceError: { id: string; message: string } | null = null;
 let activeMsg: string | null = null;
-let activeText = '';
-let activeLang: Lang = 'bn';
 const errorListeners = new Set<() => void>();
 export const getVoiceError = (id: string): string | null => (voiceError && voiceError.id === id ? voiceError.message : null);
 export const subscribeVoiceError = (l: () => void) => { errorListeners.add(l); return () => { errorListeners.delete(l); }; };
@@ -199,74 +186,12 @@ const setVoiceError = (id: string | null, message: string | null) => {
   errorListeners.forEach((l) => l());
 };
 
-// ---- Phone voice (expo-speech). The way SHEETMD speaks Bangla. ----
-const LOCALE: Record<Lang, string[]> = { bn: ['bn-BD', 'bn-IN', 'bn'], hi: ['hi-IN', 'hi'], en: ['en-US', 'en-GB', 'en'] };
-const picked = new Map<Lang, string | null>();
-
-async function pickPhoneVoice(lang: Lang): Promise<string | null> {
-  if (picked.has(lang)) return picked.get(lang)!;
-  let found: string | null = null;
-  try {
-    const all = await Speech.getAvailableVoicesAsync();
-    const pre = lang === 'bn' ? 'bn' : lang === 'hi' ? 'hi' : 'en';
-    const mine = all.filter((v) => (v.language ?? '').toLowerCase().replace('_', '-').startsWith(pre));
-    // Prefer the highest quality and an installed (offline) voice.
-    mine.sort((a, b) => (b.quality === 'Enhanced' ? 1 : 0) - (a.quality === 'Enhanced' ? 1 : 0));
-    found = mine[0]?.identifier ?? null;
-  } catch { found = null; }
-  picked.set(lang, found);
-  return found;
-}
-
-async function phoneSpeak(id: string, text: string, lang: Lang, my: number) {
-  const voice = await pickPhoneVoice(lang);
-  if (my !== token) return;
-  if (lang !== 'en' && !voice) {
-    const name = lang === 'bn' ? 'Bangla' : 'Hindi';
-    lastError = `This phone has no ${name} voice. Open Settings > Languages > Text-to-speech > Google Speech Services and install ${name} voice data.`;
-    setVoiceError(id, lastError);
-    idle();
-    return;
-  }
-  let began = false;
-  const begin = () => { if (my === token && !began) { began = true; emit({ id, loading: false }); } };
-  const guard = setTimeout(begin, 1800); // some phones never send onStart
-  try { Speech.stop(); } catch { /* ignore */ }
-  Speech.speak(text, {
-    language: LOCALE[lang][0],
-    voice: voice ?? undefined,
-    pitch: 1.0,
-    rate: 0.95,
-    volume: 1.0,
-    onStart: begin,
-    onDone: () => { clearTimeout(guard); if (my === token) idle(); },
-    onStopped: () => { clearTimeout(guard); if (my === token) idle(); },
-    onError: (e: any) => {
-      clearTimeout(guard);
-      if (my !== token) return;
-      lastError = `The phone voice failed: ${String(e?.message ?? e ?? 'unknown error')}`;
-      setVoiceError(id, lastError);
-      idle();
-    },
-  });
-}
-
 if (Native?.addListener) {
   Native.addListener('onStart', ({ id }: { id: number }) => { if (id === activeJob && state.id) emit({ id: state.id, loading: false }); });
   Native.addListener('onDone', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
   Native.addListener('onStopped', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
   Native.addListener('onError', ({ id, message }: { id: number; message: string }) => {
-    if (id !== activeJob) return;
-    activeJob = -1;
-    const msg = message || 'Voice failed.';
-    // The downloaded voice made no sound (or failed): do not leave the reader in silence, use the phone voice.
-    if (activeMsg && activeText && !/Media volume is 0/.test(msg)) {
-      phoneSpeak(activeMsg, activeText, activeLang, token);
-      return;
-    }
-    lastError = msg;
-    if (activeMsg) setVoiceError(activeMsg, lastError);
-    idle();
+    if (id === activeJob) { activeJob = -1; lastError = message || 'Voice failed.'; if (activeMsg) setVoiceError(activeMsg, lastError); idle(); }
   });
 }
 
@@ -274,7 +199,6 @@ export function stopSpeaking() {
   token++;
   activeJob = -1;
   try { Native?.stop(); } catch { /* ignore */ }
-  try { Speech.stop(); } catch { /* ignore */ }
   idle();
 }
 
@@ -282,20 +206,17 @@ export function stopSpeaking() {
 function cacheKeyOf(voiceId: string, text: string): string {
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
-  return `${voiceId}_${h.toString(36)}_${text.length}`;
+  return `${voiceId}_v2_${h.toString(36)}_${text.length}`;
 }
 
-/** Speaks `text` (native script for Bangla and Hindi). Phone voice needs no download; other voices need downloadVoice first. */
+/** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */
 export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
   const my = ++token;
   const voice = resolveVoice(lang, voiceId);
   lastError = null;
   activeMsg = id;
-  activeText = text;
-  activeLang = lang;
   setVoiceError(null, null);
   try { Native?.stop(); } catch { /* ignore */ }
-  try { Speech.stop(); } catch { /* ignore */ }
   activeJob = -1;
 
   // Hindi and Bangla voices read only native script. English letters would come out as silence, so say so.
@@ -311,16 +232,6 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
   }
   emit({ id, loading: true });
 
-  if (isPhoneVoice(voice.id)) {
-    phoneSpeak(id, text, lang, my).catch((e: any) => {
-      if (my !== token) return;
-      lastError = String(e?.message ?? e);
-      setVoiceError(id, lastError);
-      idle();
-    });
-    return;
-  }
-
   const key = cacheKeyOf(voice.id, text);
   (async () => {
     // A message that was played before is saved as audio: no model needed, it starts at once.
@@ -328,17 +239,13 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
     try { cached = !!Native?.hasCache?.(key); } catch { cached = false; }
     if (!cached) await ensureLoaded(voice);
     if (my !== token) return;
-    try { Native.setGain?.(3.0); } catch { /* old build */ }
     activeJob = ++jobCounter;
     Native.speak(activeJob, text, 1.0, voice.sid, key);
   })().catch((e: any) => {
     if (my !== token) return;
-    // Model missing or could not start: the phone voice still reads the message.
-    phoneSpeak(id, text, lang, my).catch(() => {
-      lastError = String(e?.message ?? e);
-      setVoiceError(id, lastError);
-      idle();
-    });
+    lastError = String(e?.message ?? e);
+    setVoiceError(id, lastError);
+    idle();
   });
 }
 

@@ -6,7 +6,6 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
-import android.media.audiofx.LoudnessEnhancer
 import android.os.Build
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
@@ -41,26 +40,6 @@ class OneFmVoiceModule : Module() {
   @Volatile private var cancelled: Boolean = false
   @Volatile private var currentAudioTrack: AudioTrack? = null
   private var audioFocusRequest: Any? = null
-  @Volatile private var gain = 1.0f
-  @Volatile private var liveEnhancer: LoudnessEnhancer? = null
-
-  // Sound boost 1x..4x -> 0..+15 dB. The phone's LoudnessEnhancer raises the average loudness (same as SHEETMD),
-  // which is what makes a quiet voice clearly louder.
-  private fun releaseEnhancer() {
-    try { liveEnhancer?.release() } catch (e: Exception) { }
-    liveEnhancer = null
-  }
-
-  private fun attachEnhancer(track: AudioTrack) {
-    releaseEnhancer()
-    if (gain <= 1.0f) return
-    try {
-      val e = LoudnessEnhancer(track.audioSessionId)
-      e.setTargetGain((((gain - 1.0f) / 3.0f) * 1500f).toInt().coerceIn(0, 1500))
-      e.enabled = true
-      liveEnhancer = e
-    } catch (ex: Exception) { }
-  }
 
   private fun requestAudioFocus() {
     val ctx = appContext.reactContext?.applicationContext ?: return
@@ -190,7 +169,6 @@ class OneFmVoiceModule : Module() {
       .setBufferSizeInBytes(bufSize)
       .setTransferMode(AudioTrack.MODE_STREAM)
       .build()
-    attachEnhancer(built)
     return built
   }
 
@@ -278,8 +256,6 @@ class OneFmVoiceModule : Module() {
     }
 
     Function("stop") { stopPlayback() }
-
-    Function("setGain") { g: Float -> gain = g.coerceIn(1.0f, 4.0f) }
 
     Function("hasCache") { key: String ->
       val f = cacheFile(key)
@@ -394,30 +370,51 @@ class OneFmVoiceModule : Module() {
             synchronized(genLock) {
               for (chunk in chunks) {
                 if (cancelled || activeId != id) { finishedAll = false; break }
+                // Collect the sentence first, then lift it to a clear level. Some voices (Bangla models) come out
+                // at 1 to 5 percent of full scale: not "silent", but far too quiet to hear even at full volume.
+                val parts = ArrayList<FloatArray>()
+                var chunkPeak = 0f
                 currentTts.generateWithCallback(chunk, sid = sid, speed = speed, callback = { samples ->
                   if (cancelled || activeId != id) {
                     0
                   } else {
                     if (samples.isNotEmpty()) {
-                      for (i in samples.indices) {
-                        val v = samples[i]
-                        if (v.isNaN() || v.isInfinite()) { samples[i] = 0f; badSamples++ }
-                        else { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
+                      val c = samples.copyOf()
+                      for (i in c.indices) {
+                        val v = c[i]
+                        if (v.isNaN() || v.isInfinite()) { c[i] = 0f; badSamples++ }
+                        else { val av = if (v < 0f) -v else v; if (av > chunkPeak) chunkPeak = av }
                       }
-                      t.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
-                      totalFrames += samples.size
-                      val o = out
-                      if (o != null) {
-                        try {
-                          val bb = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-                          for (v in samples) bb.putShort((v.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
-                          o.write(bb.array())
-                        } catch (e: Exception) { }
-                      }
+                      parts.add(c)
                     }
                     1
                   }
                 })
+                if (!cancelled && activeId == id && parts.isNotEmpty()) {
+                  // Level from the 99.9th percentile, not the single loudest sample, so one click cannot keep the voice quiet.
+                  var total = 0
+                  for (c in parts) total += c.size
+                  val mags = FloatArray(total)
+                  var mi = 0
+                  for (c in parts) for (v in c) { mags[mi++] = if (v < 0f) -v else v }
+                  java.util.Arrays.sort(mags)
+                  val level = mags[(total * 0.999).toInt().coerceAtMost(total - 1)]
+                  val g = if (level >= 0.002f && level < 0.8f) (0.8f / level).coerceAtMost(40f) else 1f
+                  for (c in parts) {
+                    if (g != 1f) for (i in c.indices) c[i] = (c[i] * g).coerceIn(-1f, 1f)
+                    for (v in c) { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
+                    t.write(c, 0, c.size, AudioTrack.WRITE_BLOCKING)
+                    totalFrames += c.size
+                    val o = out
+                    if (o != null) {
+                      try {
+                        val bb = ByteBuffer.allocate(c.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                        for (v in c) bb.putShort((v.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
+                        o.write(bb.array())
+                      } catch (e: Exception) { }
+                    }
+                  }
+                }
                 doneChars += chunk.length
 
                 // Start playing as soon as the audio already generated will last until the rest is ready.
@@ -476,7 +473,6 @@ class OneFmVoiceModule : Module() {
           try { out?.close() } catch (e: Exception) { }
           if (!saved) { try { tmp?.delete() } catch (e: Exception) { } }
           try { track?.stop(); track?.release() } catch (e: Exception) { }
-          releaseEnhancer()
           if (currentAudioTrack === track) currentAudioTrack = null
           abandonAudioFocus()
           if (activeId == id) activeId = -1

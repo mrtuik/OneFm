@@ -25,8 +25,7 @@
           "color": "#E31A4E"
         }
       ],
-      "./plugins/withReleaseSigning",
-      "./plugins/withTtsQueries"
+      "./plugins/withReleaseSigning"
     ],
     "icon": "./assets/icon.png"
   }
