@@ -62,6 +62,12 @@ jobs:
 
       - run: npx expo prebuild --platform android --no-install
 
+      # Shows up in Android Settings > Apps > One Fm, so you can tell which build is installed.
+      - name: Stamp build number
+        run: |
+          sed -i "s/versionCode [0-9]\+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"0.1.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+
       - name: Speed up Gradle
         run: |
           {
