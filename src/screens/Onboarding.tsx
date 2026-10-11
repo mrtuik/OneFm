@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Logo } from '../components/Logo';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
 import { colors } from '../theme';
@@ -36,9 +37,9 @@ export function AgeScreen() {
     <Frame>
       <Hero line="Stories you can talk to, and hear back." />
       <View style={{ gap: 16 }}>
-        <Pressable onPress={() => setOk(!ok)} style={[s.check, ok && { borderColor: colors.amber }]}>
-          <View style={[s.box, ok && { backgroundColor: colors.amber, borderColor: colors.amber }]}>
-            {ok ? <Text style={{ color: '#1A0B10', fontWeight: '800' }}>{'\u2713'}</Text> : null}
+        <Pressable onPress={() => setOk(!ok)} style={[s.check, ok && { borderColor: colors.accent }]}>
+          <View style={[s.box, ok && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+            {ok ? <Ionicons name="checkmark" size={18} color={colors.onAccent} /> : null}
           </View>
           <Text style={s.checkText}>Ami confirm korchi amar boyosh 18 ba tar beshi.</Text>
         </Pressable>
@@ -68,11 +69,11 @@ export function LoginScreen() {
         <TextInput style={s.input} placeholder="Email" placeholderTextColor={colors.sub} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
         <TextInput style={s.input} placeholder="Password" placeholderTextColor={colors.sub} secureTextEntry value={pw} onChangeText={setPw} />
         {err ? <Text style={s.err}>{err}</Text> : null}
-        {busy ? <ActivityIndicator color={colors.amber} style={{ height: 52 }} /> : (
+        {busy ? <ActivityIndicator color={colors.accent} style={{ height: 52 }} /> : (
           <>
             <GradientButton title="Sign in" onPress={() => run(() => emailSignIn(email, pw))} />
             <OutlineButton title="Create account" onPress={() => run(() => emailSignUp(email, pw))} />
-            <OutlineButton title="Continue with Google" onPress={() => run(googleSignIn)} />
+            <OutlineButton icon="logo-google" title="Continue with Google" onPress={() => run(googleSignIn)} />
           </>
         )}
         <Pressable onPress={() => update({ guest: true })} style={{ alignSelf: 'center', padding: 12 }}>
@@ -116,13 +117,13 @@ export function LanguageScreen() {
 
 const s = StyleSheet.create({
   hero: { alignItems: 'center', marginTop: 40, marginBottom: 48, gap: 14 },
-  brand: { color: colors.text, fontSize: 34, fontWeight: '800', fontFamily: 'serif' },
+  brand: { color: colors.text, fontSize: 34, fontWeight: '800' },
   line: { color: colors.sub, fontSize: 15, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
   check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line },
   box: { width: 24, height: 24, borderRadius: 7, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   checkText: { color: colors.text, fontSize: 15, flex: 1, lineHeight: 21 },
   input: { height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 16, color: colors.text, fontSize: 16 },
-  err: { color: colors.rose, fontSize: 13 },
+  err: { color: colors.accent, fontSize: 13 },
   label: { color: colors.sub, fontSize: 13, fontWeight: '600' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
 });

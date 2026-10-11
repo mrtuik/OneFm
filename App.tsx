@@ -1,10 +1,11 @@
 import React from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { SettingsProvider, useSettings } from './src/state/settings';
 import { useAuthUser } from './src/firebase/auth';
 import { AgeScreen, LanguageScreen, LoginScreen } from './src/screens/Onboarding';
@@ -21,20 +22,25 @@ const Tab = createBottomTabNavigator();
 
 const theme = {
   ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: 'rgba(255,255,255,0.08)', primary: colors.amber },
+  colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: 'rgba(255,255,255,0.08)', primary: colors.accent },
 };
 
-const tabGlyph: Record<string, string> = { Home: '\u2302', Search: '\u2315', Chats: '\u2709', Community: '\u2726' };
+const tabIcon: Record<string, [any, any]> = {
+  Home: ['home', 'home-outline'],
+  Search: ['search', 'search-outline'],
+  Chats: ['chatbubbles', 'chatbubbles-outline'],
+  Community: ['people', 'people-outline'],
+};
 
 function Tabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         header: () => <AppHeader />,
-        tabBarActiveTintColor: colors.amber,
+        tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.sub,
         tabBarStyle: { backgroundColor: colors.bg, borderTopColor: 'rgba(255,255,255,0.08)' },
-        tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>{tabGlyph[route.name]}</Text>,
+        tabBarIcon: ({ color, focused, size }) => <Ionicons name={tabIcon[route.name][focused ? 0 : 1]} size={size} color={color} />,
       })}
     >
       <Tab.Screen name="Home" component={Home} />
@@ -52,7 +58,7 @@ function Root() {
   if (!loaded || !ready) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.amber} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
