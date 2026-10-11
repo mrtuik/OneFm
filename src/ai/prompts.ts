@@ -104,6 +104,8 @@ function storyBible(story: Story): string {
     story.centralQuestion ? `Central question: ${story.centralQuestion}` : null,
     story.openingLine ? `Opening line idea (episode 1 only): ${story.openingLine}` : null,
     `Genres: ${story.genres.join(', ')}`,
+    story.plotBeats?.length ? `Plot beats in order (move toward them slowly, never skip ahead):\n${story.plotBeats.map((b, i) => `${i + 1}. ${b}`).join('\n')}` : null,
+    story.endings?.length ? `Possible endings (decide late, from the user's choices):\n${story.endings.map((b) => `- ${b}`).join('\n')}` : null,
     story.rules?.length ? `Story rules (must follow):\n${story.rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}` : null,
     '',
     'CHARACTERS',

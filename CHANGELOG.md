@@ -1,6 +1,14 @@
 # One Fm changelog
 
+## V6.8.1
+- App icon: the pen is bigger in the launcher icon (adaptive and legacy), so the icon looks full.
+- Voice silence: every message is now checked for sound. If a voice makes no sound, the chip shows the exact reason under it (media volume is 0, the voice text is in English letters, or the voice produced silent audio with its loudest sample level) instead of playing silence. Silent audio is no longer saved, so it cannot replay silence for the same text.
+- Voice text: Bangla joiners (ZWJ and ZWNJ) are no longer deleted from the voice text, which was breaking words like ব্যাপার. The Bengali or Devanagari conversion tries twice if the first answer still has English letters.
+- NaN or infinite samples from a voice model are removed and counted. The player volume is set to full before play.
+
 ## V6.8
+- Story now supports plotBeats and endings (from the story_engine_guide). The AI sees them in the story bible.
+- Stories loaded from the database get safe defaults for highlight, readMin, creatorName and createdAt, so a story with missing fields no longer shows "undefined min each" or breaks the New row.
 - Fix: the AI no longer repeats the opening scene when you reply. Every turn now tells the model exactly what your role just said and that the first paragraph must answer it. The chat history no longer starts with an AI message.
 - Fix: a reply that is almost the same as the last two AI replies is rejected and written again (up to 3 tries).
 - Narration never describes your role (face, eyes, feelings). Your role is only "you / tumi". New rules: answer first, no re-describing the same scene, use concrete story details.

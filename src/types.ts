@@ -39,6 +39,9 @@ export interface Story {
   centralQuestion?: string;
   rules?: string[];
   secrets?: string[];
+  /** Main story turns in order, and the possible endings. Optional, from the story_engine_guide. */
+  plotBeats?: string[];
+  endings?: string[];
   openingLine?: string;
   creatorName: string;
   likeCount: number;

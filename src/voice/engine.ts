@@ -175,12 +175,23 @@ export const lastVoiceError = () => lastError;
 
 const idle = () => emit({ id: null, loading: false });
 
+// ---- Voice problem shown under the voice chip of the message that failed ----
+let voiceError: { id: string; message: string } | null = null;
+let activeMsg: string | null = null;
+const errorListeners = new Set<() => void>();
+export const getVoiceError = (id: string): string | null => (voiceError && voiceError.id === id ? voiceError.message : null);
+export const subscribeVoiceError = (l: () => void) => { errorListeners.add(l); return () => { errorListeners.delete(l); }; };
+const setVoiceError = (id: string | null, message: string | null) => {
+  voiceError = id && message ? { id, message } : null;
+  errorListeners.forEach((l) => l());
+};
+
 if (Native?.addListener) {
   Native.addListener('onStart', ({ id }: { id: number }) => { if (id === activeJob && state.id) emit({ id: state.id, loading: false }); });
   Native.addListener('onDone', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
   Native.addListener('onStopped', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
   Native.addListener('onError', ({ id, message }: { id: number; message: string }) => {
-    if (id === activeJob) { activeJob = -1; lastError = message || 'Voice failed.'; idle(); }
+    if (id === activeJob) { activeJob = -1; lastError = message || 'Voice failed.'; if (activeMsg) setVoiceError(activeMsg, lastError); idle(); }
   });
 }
 
@@ -203,8 +214,22 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
   const my = ++token;
   const voice = resolveVoice(lang, voiceId);
   lastError = null;
+  activeMsg = id;
+  setVoiceError(null, null);
   try { Native?.stop(); } catch { /* ignore */ }
   activeJob = -1;
+
+  // Hindi and Bangla voices read only native script. English letters would come out as silence, so say so.
+  if (lang !== 'en') {
+    const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+    const native = (text.match(/[\u0900-\u097F\u0980-\u09FF]/g) ?? []).length;
+    if (latin > native) {
+      lastError = 'The voice text came out in English letters, so this voice cannot read it. Tap Abar to write the reply again.';
+      setVoiceError(id, lastError);
+      idle();
+      return;
+    }
+  }
   emit({ id, loading: true });
 
   const key = cacheKeyOf(voice.id, text);
@@ -219,6 +244,7 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
   })().catch((e: any) => {
     if (my !== token) return;
     lastError = String(e?.message ?? e);
+    setVoiceError(id, lastError);
     idle();
   });
 }

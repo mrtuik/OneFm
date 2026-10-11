@@ -16,6 +16,8 @@ export function withRoleInfo(story: Story): Story {
     centralQuestion: story.centralQuestion ?? sample.centralQuestion,
     rules: story.rules?.length ? story.rules : sample.rules,
     secrets: story.secrets?.length ? story.secrets : sample.secrets,
+    plotBeats: story.plotBeats?.length ? story.plotBeats : sample.plotBeats,
+    endings: story.endings?.length ? story.endings : sample.endings,
     openingLine: story.openingLine ?? sample.openingLine,
     episodes: story.episodes.map((e, i) => ({ ...sample.episodes[i], ...Object.fromEntries(Object.entries(e).filter(([, v]) => v !== undefined && v !== '')) })) as Story['episodes'],
     characters: story.characters.map((c) => {

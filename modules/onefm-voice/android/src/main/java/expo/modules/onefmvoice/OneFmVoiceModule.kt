@@ -292,12 +292,20 @@ class OneFmVoiceModule : Module() {
         try {
           requestAudioFocus()
           var totalFrames = 0
+          // Loudest sample and bad samples of this message. All-quiet audio means the voice made no sound.
+          var peak = 0f
+          var badSamples = 0
+          var sampleRateUsed = 0
+          val mediaVolume = try {
+            (appContext.reactContext?.applicationContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 1
+          } catch (e: Exception) { 1 }
 
           fun begin() {
             val t = track
             if (t != null && !started) {
               started = true
               sendEvent("onStart", mapOf("id" to id))
+              try { t.setVolume(1.0f) } catch (e: Exception) { }
               t.play()
             }
           }
@@ -309,6 +317,7 @@ class OneFmVoiceModule : Module() {
               val hdr = ByteArray(4)
               readFully(input, hdr)
               val sr = ByteBuffer.wrap(hdr).order(ByteOrder.LITTLE_ENDIAN).getInt()
+              sampleRateUsed = sr
               val t = buildTrack(sr)
               track = t
               currentAudioTrack = t
@@ -319,7 +328,12 @@ class OneFmVoiceModule : Module() {
                 val count = n / 2
                 if (count <= 0) break
                 val bb = ByteBuffer.wrap(bytes, 0, count * 2).order(ByteOrder.LITTLE_ENDIAN)
-                for (i in 0 until count) floats[i] = bb.getShort() / 32768f
+                for (i in 0 until count) {
+                  val fv = bb.getShort() / 32768f
+                  floats[i] = fv
+                  val av = if (fv < 0f) -fv else fv
+                  if (av > peak) peak = av
+                }
                 t.write(floats, 0, count, AudioTrack.WRITE_BLOCKING)
                 totalFrames += count
                 if (!started) begin()
@@ -331,6 +345,7 @@ class OneFmVoiceModule : Module() {
           } else if (currentTts != null) {
             // ---- First play: generate sentence by sentence, play while generating, save for next time ----
             val sr = currentTts.sampleRate()
+            sampleRateUsed = sr
             val t = buildTrack(sr)
             track = t
             currentAudioTrack = t
@@ -359,6 +374,11 @@ class OneFmVoiceModule : Module() {
                     0
                   } else {
                     if (samples.isNotEmpty()) {
+                      for (i in samples.indices) {
+                        val v = samples[i]
+                        if (v.isNaN() || v.isInfinite()) { samples[i] = 0f; badSamples++ }
+                        else { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
+                      }
                       t.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
                       totalFrames += samples.size
                       val o = out
@@ -393,7 +413,7 @@ class OneFmVoiceModule : Module() {
 
             try { out?.flush(); out?.close() } catch (e: Exception) { }
             out = null
-            if (finishedAll && cache != null && tmp != null && totalFrames > 0) {
+            if (finishedAll && cache != null && tmp != null && totalFrames > 0 && peak >= 0.01f) {
               if (cache.exists()) cache.delete()
               saved = tmp?.renameTo(cache) ?: false
               if (saved) pruneCache()
@@ -416,7 +436,11 @@ class OneFmVoiceModule : Module() {
           }
 
           if (!cancelled && activeId == id) {
-            if (!started) sendEvent("onError", mapOf("id" to id, "message" to "The voice produced no audio"))
+            val silent = started && totalFrames > 0 && peak < 0.01f
+            if (silent && cached && cache != null) { try { cache.delete() } catch (e: Exception) { } }
+            if (!started) sendEvent("onError", mapOf("id" to id, "message" to "The voice produced no audio. The text may contain letters this voice cannot read."))
+            else if (silent && mediaVolume == 0) sendEvent("onError", mapOf("id" to id, "message" to "Media volume is 0. Turn the phone's media volume up."))
+            else if (silent) sendEvent("onError", mapOf("id" to id, "message" to String.format("The voice made no sound (loudest sample %.4f, %d bad samples, %d Hz). Try another voice in Profile.", peak, badSamples, sampleRateUsed)))
             else sendEvent("onDone", mapOf("id" to id))
           }
         } catch (e: Throwable) {

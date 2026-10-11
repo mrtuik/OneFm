@@ -11,6 +11,10 @@ const norm = (s: Story): Story => ({
   episodes: s.episodes ?? [],
   likeCount: s.likeCount ?? 0,
   playCount: s.playCount ?? 0,
+  highlight: s.highlight ?? (s.title ?? '').split(' ')[0],
+  readMin: s.readMin ?? 6,
+  creatorName: s.creatorName ?? 'One Fm',
+  createdAt: s.createdAt ?? 0,
   cover: s.cover ?? ['#2A2230', '#5A3A4A'],
 });
 

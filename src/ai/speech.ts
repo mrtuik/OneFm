@@ -39,17 +39,21 @@ export async function ensureSpeech(lang: Lang, display: string, speech: string, 
   if (!source) return current;
 
   try {
-    const out = await chatCompletion({
-      cfg, apiKey: key, model: cfg.model, maxTokens: 900, temperature: 0.1,
-      messages: [
-        { role: 'system', content: `You prepare text for a text-to-speech voice, so spelling decides how it sounds. ${RULES[lang]} Convert EVERY word, in the same order. Never translate, shorten, summarise, skip or add anything. Keep the commas and full stops. Output only the converted text.` },
-        { role: 'user', content: source },
-      ],
-    });
-    const fixed = cleanSpeech(out);
-    if (fixed && covers(display, fixed) && latinShare(fixed) < 0.1) return fixed;
+    let fixed = '';
+    // The voice only reads native script. If the first try still has English letters, try once more.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const out = await chatCompletion({
+        cfg, apiKey: key, model: cfg.model, maxTokens: 900, temperature: attempt === 0 ? 0.1 : 0.3,
+        messages: [
+          { role: 'system', content: `You prepare text for a text-to-speech voice, so spelling decides how it sounds. ${RULES[lang]} Convert EVERY word, in the same order. Never translate, shorten, summarise, skip or add anything. Keep the commas and full stops. Output only the converted text.${attempt ? ' The previous answer still had English letters. Every word must be in the native script.' : ''}` },
+          { role: 'user', content: source },
+        ],
+      });
+      fixed = cleanSpeech(out);
+      if (fixed && covers(display, fixed) && latinShare(fixed) < 0.1) return fixed;
+    }
     if (current && covers(display, current) && latinShare(current) < 0.1) return current;
-    return fixed.length > current.length ? fixed : current;
+    return latinShare(fixed) <= latinShare(current) || !current ? fixed || current : current;
   } catch {
     return current || source;
   }

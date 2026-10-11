@@ -24,6 +24,20 @@ export const SAMPLE_STORIES: Story[] = [
       'Ritwik er baba osustho hoye porechilo, tai se hothat sheher chhere giyechilo. Eta Mitali jane na.',
       'Mitali cafe ta Ritwik er pochhonder chai r recipe diye shuru koreche, kintu eta kauke bole na.',
     ],
+    plotBeats: [
+      'Brishtir bikele Ritwik cafe te ashe, Mitali take dekhe. Dujon-i ostir.',
+      'Ritwik er bag theke purono notebook pore jay. Mitali dekhe, kintu kichu bole na.',
+      'Mitali prosno kore, Ritwik ekta chhoto sotyi bole kintu poro ta lukay.',
+      'Cafe r recipe r secret ta Ritwik er nojore ashe. Mitali ostir hoy.',
+      'Ritwik r Mitali r ekta jhogra: tin bochhor kano chole giyechile?',
+      'Ritwik er baba r kotha, Mitali notebook er chithi pore.',
+      'Final: dujon ki bolbe ar kothay thakbe.',
+    ],
+    endings: [
+      'A) Mitali khoma kore, dujon abar cha-ghor e ek sathe kaj shuru kore.',
+      'B) Mitali notebook rekhe Ritwik ke pathay, kintu chithi te uttor likhe rakhe.',
+      'C) Bondhutto fire ashe, prem hoy na, kintu dujoner mon e shanti.',
+    ],
     openingLine: 'Brishti r shobdo e cafe r bhetor sob kichu jhapsa, tarpor darja r ghonta bajlo.',
     characters: [
       {
