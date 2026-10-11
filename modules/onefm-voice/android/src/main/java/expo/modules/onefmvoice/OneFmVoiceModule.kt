@@ -321,35 +321,40 @@ class OneFmVoiceModule : Module() {
 
           if (cached && cache != null) {
             // ---- Replay from the saved file: no generation, starts at 0.0 s ----
-            val input = BufferedInputStream(FileInputStream(cache))
-            try {
-              val hdr = ByteArray(4)
-              readFully(input, hdr)
-              val sr = ByteBuffer.wrap(hdr).order(ByteOrder.LITTLE_ENDIAN).getInt()
-              sampleRateUsed = sr
-              val t = buildTrack(sr)
-              track = t
-              currentAudioTrack = t
-              val bytes = ByteArray(16384)
-              val floats = FloatArray(8192)
-              while (!cancelled && activeId == id) {
-                val n = readFully(input, bytes)
-                val count = n / 2
-                if (count <= 0) break
-                val bb = ByteBuffer.wrap(bytes, 0, count * 2).order(ByteOrder.LITTLE_ENDIAN)
-                for (i in 0 until count) {
-                  val fv = bb.getShort() / 32768f
-                  floats[i] = fv
-                  val av = if (fv < 0f) -fv else fv
-                  if (av > peak) peak = av
-                }
-                t.write(floats, 0, count, AudioTrack.WRITE_BLOCKING)
-                totalFrames += count
-                if (!started) begin()
-                if (n < bytes.size) break
-              }
-            } finally {
-              try { input.close() } catch (e: Exception) { }
+            // The whole file is read and levelled again, so audio that an older build saved too quietly is still audible.
+            val all = cache.readBytes()
+            if (all.size < 8) throw IllegalStateException("Saved voice file is damaged")
+            val sr = ByteBuffer.wrap(all, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt()
+            sampleRateUsed = sr
+            val count = (all.size - 4) / 2
+            val bb = ByteBuffer.wrap(all, 4, count * 2).order(ByteOrder.LITTLE_ENDIAN)
+            val floats = FloatArray(count)
+            var filePeak = 0f
+            for (i in 0 until count) {
+              val fv = bb.getShort() / 32768f
+              floats[i] = fv
+              val av = if (fv < 0f) -fv else fv
+              if (av > filePeak) filePeak = av
+            }
+            rawPeak = filePeak
+            val g = if (filePeak >= 0.002f && filePeak < 0.5f) (0.8f / filePeak).coerceAtMost(40f) else 1f
+            if (g != 1f) for (i in 0 until count) floats[i] = (floats[i] * g).coerceIn(-1f, 1f)
+            peak = (filePeak * g).coerceAtMost(1f)
+            val t = buildTrack(sr)
+            track = t
+            currentAudioTrack = t
+            var pos = 0
+            while (!cancelled && activeId == id && pos < count) {
+              val n = minOf(8192, count - pos)
+              t.write(floats, pos, n, AudioTrack.WRITE_BLOCKING)
+              pos += n
+              totalFrames += n
+              if (!started) begin()
+            }
+            if (!cancelled && activeId == id && totalFrames > 0) {
+              sendEvent("onInfo", mapOf(
+                "id" to id, "gen" to 0, "audio" to (totalFrames.toDouble() / sr), "raw" to rawPeak.toDouble(), "peak" to peak.toDouble()
+              ))
             }
           } else if (currentTts != null) {
             // ---- First play: generate sentence by sentence, play while generating, save for next time ----

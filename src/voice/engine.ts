@@ -239,7 +239,7 @@ export function stopSpeaking() {
 function cacheKeyOf(voiceId: string, text: string): string {
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
-  return `${voiceId}_v3_${h.toString(36)}_${text.length}`;
+  return `${voiceId}_v4_${h.toString(36)}_${text.length}`;
 }
 
 /** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */

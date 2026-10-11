@@ -164,11 +164,14 @@ jobs:
       - name: Show SHA-1 of the APK signing key
         run: |
           APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
-          keytool -printcert -jarfile "$APK" | tee cert.txt
+          # keytool -jarfile only reads old v1 signatures and prints "Not a signed jar file" for a v2/v3 APK.
+          # apksigner reads the real signature.
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK" | tee cert.txt
           {
-            echo '### Add this SHA-1 to Firebase (com.onefm.tuik)'
+            echo '### Add these to Firebase (com.onefm.tuik) > Project settings > Your apps > Add fingerprint'
             echo '```'
-            grep 'SHA1:' cert.txt | sed 's/^ *//'
+            grep -E 'SHA-(1|256) digest' cert.txt | sed 's/^Signer #1 certificate //'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

@@ -1,6 +1,8 @@
 # One Fm changelog
 
 ## V6.9.1
+- Profile preview and replays: a saved (cached) voice file is now read whole and levelled to a clear volume before it plays, and the cache key is bumped (v4) so any quiet or silent file saved by an older build is ignored. Replays also show the numbers line under the voice. Before, a replay showed the stop icon but played almost nothing, with no error.
+- Build summary now prints the SHA-1 and SHA-256 with apksigner (keytool printed "Not a signed jar file" for this APK).
 - Voice no longer waits for a second network call: when the story's own speech_text is already clean Bangla/Hindi script and covers the whole message, it plays at once. The extra rewrite call (15 to 25 s on mobile data) now runs only when speech_text is bad.
 - Native player: playback starts right after the first samples are written (before, play() came only after a whole write loop, so a piece longer than the buffer could block forever).
 - First spoken piece is cut shorter (about 36 characters) so the first sound is ready sooner.
