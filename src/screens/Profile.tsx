@@ -60,7 +60,7 @@ function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; o
         <View style={{ flex: 1 }}>
           <Text style={s.voiceName}>{v.name}</Text>
           <Text style={s.hint}>
-            {st.state === 'downloading' ? `Downloading ${st.percent}%` : ready ? 'Ready, works offline' : st.error ? 'Download failed. Try again' : `${v.sizeMB} MB download`}
+            {st.state === 'downloading' ? `${st.phase ?? 'Downloading'} ${st.percent}%` : ready ? 'Ready, works offline' : st.error ? st.error : `${v.sizeMB} MB download`}
           </Text>
         </View>
       </Pressable>

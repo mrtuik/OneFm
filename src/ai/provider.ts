@@ -4,10 +4,23 @@ export type Preset = 'groq' | 'openrouter' | 'custom';
 export interface ProviderSettings { preset: Preset; baseUrl: string; model: string; summaryModel: string }
 
 export const PRESETS: Record<Exclude<Preset, 'custom'>, ProviderSettings> = {
-  groq: { preset: 'groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', summaryModel: 'llama-3.1-8b-instant' },
+  // Groq shut down llama-3.3-70b-versatile and llama-3.1-8b-instant on 16 Aug 2026 (404 model not found). gpt-oss is the replacement.
+  groq: { preset: 'groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b', summaryModel: 'openai/gpt-oss-20b' },
   openrouter: { preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini', summaryModel: 'openai/gpt-4o-mini' },
 };
 export const DEFAULT_PROVIDER: ProviderSettings = PRESETS.groq;
+
+/** Models providers have shut down, and what to use instead. Applied to settings saved by older versions. */
+export const RETIRED_MODELS: Record<string, string> = {
+  'llama-3.3-70b-versatile': 'openai/gpt-oss-120b',
+  'llama-3.1-8b-instant': 'openai/gpt-oss-20b',
+  'qwen/qwen3-32b': 'openai/gpt-oss-120b',
+  'meta-llama/llama-4-scout-17b-16e-instruct': 'openai/gpt-oss-120b',
+};
+export const migrateProvider = (p: ProviderSettings): ProviderSettings =>
+  p.baseUrl.includes('groq.com')
+    ? { ...p, model: RETIRED_MODELS[p.model] ?? p.model, summaryModel: RETIRED_MODELS[p.summaryModel] ?? p.summaryModel }
+    : p;
 
 export class ProviderError extends Error {
   code: 'no_key' | 'auth' | 'rate' | 'network' | 'server' | 'bad_reply';
@@ -28,6 +41,8 @@ interface CallArgs {
 
 async function post(args: CallArgs, withJsonMode: boolean): Promise<Response> {
   const { cfg, apiKey, model, messages, maxTokens = 800, temperature = 0.8 } = args;
+  // gpt-oss models think before they answer and the thinking uses the token budget. Keep it short and leave room.
+  const reasoning = /gpt-oss/i.test(model);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60000);
   try {
@@ -35,7 +50,8 @@ async function post(args: CallArgs, withJsonMode: boolean): Promise<Response> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model, messages, temperature, max_tokens: maxTokens,
+        model, messages, temperature, max_tokens: reasoning ? maxTokens * 2 + 600 : maxTokens,
+        ...(reasoning && cfg.baseUrl.includes('groq.com') ? { reasoning_effort: 'low' } : {}),
         ...(withJsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: ctrl.signal,
@@ -54,6 +70,11 @@ export async function chatCompletion(args: CallArgs): Promise<string> {
   if (res.status === 400 && args.json) res = await post(args, false);
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) throw new ProviderError('auth', 'The API key was rejected. Check it in Profile.');
+    if (res.status === 404) {
+      let d = '';
+      try { d = (await res.json())?.error?.message ?? ''; } catch {}
+      throw new ProviderError('server', `${d || 'Model not found.'} Open Profile and pick a model your provider still offers (Groq: openai/gpt-oss-120b).`);
+    }
     if (res.status === 429) throw new ProviderError('rate', 'The AI provider is rate limiting you. Wait a moment and retry.');
     let detail = '';
     try { detail = (await res.json())?.error?.message ?? ''; } catch {}

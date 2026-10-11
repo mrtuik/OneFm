@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Lang } from '../types';
-import { DEFAULT_PROVIDER, ProviderSettings } from '../ai/provider';
+import { DEFAULT_PROVIDER, ProviderSettings, migrateProvider } from '../ai/provider';
 
 export type TextSize = 'small' | 'medium' | 'large';
 
@@ -33,7 +33,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then((raw) => {
         if (!raw) return;
         const p = JSON.parse(raw);
-        setS({ ...DEFAULT, ...p, voices: { ...(p.voices ?? {}) }, provider: { ...DEFAULT.provider, ...(p.provider ?? {}) } });
+        setS({ ...DEFAULT, ...p, voices: { ...(p.voices ?? {}) }, provider: migrateProvider({ ...DEFAULT.provider, ...(p.provider ?? {}) }) });
       })
       .catch(() => {})
       .finally(() => setLoaded(true));

@@ -23,13 +23,18 @@ When an episode ends, the app summarizes it, extracts facts, and every 10 episod
 Chats, summaries and facts stay on the phone (AsyncStorage). Code: `src/ai/memory.ts`, `src/chat/engine.ts`.
 
 ## Voice (M4, sherpa-onnx)
-`src/voice/engine.ts` is the only file that talks to the voice engine. It runs sherpa-onnx text-to-speech fully on the phone through the `react-native-sherpa-onnx` package. The phone's own text-to-speech voices are not used.
+`src/voice/engine.ts` is the only file that talks to the voice engine. It uses the local native module `modules/onefm-voice` (Kotlin, same design as the SHEETMD `sheet-tts` module). The phone's own text-to-speech voices are not used.
+- The sherpa-onnx Kotlin API is `modules/onefm-voice/android/src/main/java/com/k2fsa/sherpa/onnx/Tts.kt` (v1.13.8). The native `.so` files are downloaded by the build workflow (step "Download sherpa-onnx native libraries") into `modules/onefm-voice/android/src/main/jniLibs/`, so they are not in git. Keep the version in the workflow and in `Tts.kt` the same.
 - Voices are models from the sherpa-onnx `tts-models` release (list: `VOICES` in `engine.ts`). English: Piper Lessac and Ryan. Hindi: Piper Priyamvada, Pratham, Rohan. Bangla: Coqui female and Mimic3 multi voice.
-- Models are not bundled. Download one in Profile > Voice (or tap the "Download voice" chip in a chat). It is stored on the phone and works offline. Sizes are 64 to 103 MB, so use Wi-Fi.
-- Replies are streamed into the native PCM player sentence by sentence, so audio starts early. Only one message speaks at a time.
+- Models are not bundled. Download one in Profile > Voice (or tap the "Download voice" chip in a chat). The app downloads the `.tar.bz2` from GitHub, the native module unpacks it into the app's private storage, and it then works offline. Sizes are 64 to 103 MB, so use Wi-Fi.
+- Audio is streamed into an `AudioTrack` while it is generated, so playback starts after the first sentence. Only one message speaks at a time.
 - Bangla and Hindi voices read native script, so every AI reply carries `speech_text` (Bengali script or Devanagari) next to the Roman `display_text`.
-- Extra native packages (peers of the library): `@dr.pogodin/react-native-fs` and `@kesha-antonov/react-native-background-downloader`. They autolink during `expo prebuild`.
-- To add a voice, add one line to `VOICES` with the exact model id from https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models.
+- To add a voice, add one line to `VOICES` with the exact model name from https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models. The workflow step "Verify voice model links" warns if a name does not exist.
+- Download error text is shown on the voice chip and in Profile.
+
+## AI provider
+- Groq shut down `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` on 16 Aug 2026. The presets now use `openai/gpt-oss-120b` (chat) and `openai/gpt-oss-20b` (summaries). Old saved settings are switched automatically.
+- Free tiers have daily limits (Groq free plan, for example, about 8,000 tokens per minute and 200,000 per day for gpt-oss-120b). When you hit a limit the app shows "rate limiting" and Retry.
 
 ## Google Sign-In fix (must)
 `google-services.json` currently has only the web client (type 3) and no Android client (type 1), because no SHA-1 was added.

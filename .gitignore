@@ -1,7 +1,9 @@
 node_modules/
 .expo/
-android/
-ios/
+/android/
+/ios/
 dist/
 *.keystore
 *.jks
+# sherpa-onnx native libraries are downloaded by the build workflow
+modules/onefm-voice/android/src/main/jniLibs/

@@ -32,7 +32,7 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
     return (
       <View style={s.chip}>
         <ActivityIndicator size="small" color={colors.accent} />
-        <Text style={s.missing}>Downloading voice {status.percent}%</Text>
+        <Text style={s.missing}>{status.phase ?? 'Downloading'} voice {status.percent}%</Text>
       </View>
     );
   }
@@ -41,7 +41,7 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
     return (
       <Pressable onPress={() => downloadVoice(voice.id)} style={s.chip} accessibilityRole="button" accessibilityLabel="Download voice">
         <Ionicons name="download-outline" size={18} color={colors.accent} />
-        <Text style={s.missing}>{status.error ? 'Download failed. Tap to retry' : `Download voice (${voice.sizeMB} MB) to hear this`}</Text>
+        <Text style={s.missing}>{status.error ? `${status.error} Tap to retry.` : `Download voice (${voice.sizeMB} MB) to hear this`}</Text>
       </Pressable>
     );
   }
@@ -63,9 +63,9 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
 }
 
 const s = StyleSheet.create({
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'flex-start', paddingVertical: 8, paddingLeft: 8, paddingRight: 14, borderRadius: radius.card, borderWidth: 1.5, borderColor: colors.line },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'flex-start', maxWidth: '100%', paddingVertical: 8, paddingLeft: 8, paddingRight: 14, borderRadius: radius.card, borderWidth: 1.5, borderColor: colors.line },
   play: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   wave: { flexDirection: 'row', alignItems: 'center', gap: 2.5, height: 20 },
   time: { color: colors.sub, fontSize: 12, fontVariant: ['tabular-nums'] },
-  missing: { color: colors.sub, fontSize: 13 },
+  missing: { color: colors.sub, fontSize: 13, flexShrink: 1 },
 });

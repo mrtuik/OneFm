@@ -1,5 +1,12 @@
 # One Fm changelog
 
+## V5
+- Voice rebuilt on a local native module (`modules/onefm-voice`) ported from SHEETMD's working `sheet-tts`. The `react-native-sherpa-onnx` library and its two peer packages are removed: its download manager failed on the phone ("Download failed") and its codegen broke the CMake step. Download uses expo-file-system, unpacking is done natively, playback streams into an AudioTrack. Error messages now show the real reason.
+- Build workflow downloads the sherpa-onnx native libraries (v1.13.8, arm64) and verifies the voice model links. The V4.2 codegen step is removed.
+- Groq models: `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` no longer exist (retired 16 Aug 2026), which caused "404 model does not exist". Presets now use `openai/gpt-oss-120b` and `openai/gpt-oss-20b`; saved settings are migrated; gpt-oss gets low reasoning effort and a bigger token budget; a 404 now tells you what to change.
+- `.gitignore` uses `/android/` and `/ios/` so `modules/onefm-voice/android` is not ignored.
+- New dependency: expo-file-system. Removed: react-native-sherpa-onnx, @dr.pogodin/react-native-fs, @kesha-antonov/react-native-background-downloader.
+
 ## V4.2
 - Build fix: the Gradle build failed in `configureCMakeRelWithDebInfo` because react-native-sherpa-onnx had not generated its codegen folder yet. The workflow now generates it first (step "Pre-generate sherpa-onnx codegen") and no longer sets `org.gradle.configureondemand`, which can break the task order of React Native libraries.
 

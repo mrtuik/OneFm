@@ -1,16 +1,17 @@
+import * as FS from 'expo-file-system/legacy';
+import { requireNativeModule } from 'expo';
 import { Lang } from '../types';
-import { createStreamingTTS, type StreamingTtsEngine, type TtsStreamController } from 'react-native-sherpa-onnx/tts';
-import { ModelCategory, deleteModel, ensureModel, getModelPath } from 'react-native-sherpa-onnx/download';
 
 /**
  * Voice engine. The app talks only to this file.
- * It runs sherpa-onnx text-to-speech fully on the phone. A voice is a model that is
- * downloaded once (Profile > Voice, or the first time you tap a voice chip) and then works offline.
- * The device's own text-to-speech voices are not used.
+ * Runs sherpa-onnx text-to-speech fully on the phone through the local native module
+ * `modules/onefm-voice` (same design as the SHEETMD sheet-tts module).
+ * A voice is a model archive from the sherpa-onnx `tts-models` release. It is downloaded once,
+ * extracted into the app's private storage, and then works offline.
  */
 
 export interface VoiceInfo {
-  /** Model id in the sherpa-onnx tts-models release. */
+  /** Model name in the sherpa-onnx tts-models release (also the folder name on the phone). */
   id: string;
   name: string;
   lang: Lang;
@@ -19,6 +20,9 @@ export interface VoiceInfo {
   /** Speaker number inside the model. */
   sid: number;
 }
+
+const RELEASE = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models';
+export const voiceUrl = (id: string) => `${RELEASE}/${id}.tar.bz2`;
 
 // First voice of each language is the default. Hindi and Bangla voices are trained on native script,
 // which is why every AI reply carries a speech_text field in Devanagari or Bengali script.
@@ -40,9 +44,20 @@ export function resolveVoice(lang: Lang, voiceId?: string): VoiceInfo {
   return list.find((v) => v.id === voiceId) ?? list[0];
 }
 
+// ---- Native module (null in Expo Go or a build without the module) ----
+const Native: any = (() => {
+  try { return requireNativeModule('OneFmVoice'); } catch { return null; }
+})();
+
+const ROOT = () => `${FS.documentDirectory}voices/`;
+const dirOf = (id: string) => `${ROOT()}${id}/`;
+const partOf = (id: string) => `${ROOT()}${id}.tar.bz2.part`;
+// Kotlin's java.io.File needs a plain path, not a file:// URI
+const np = (uri: string) => uri.replace(/^file:\/\//, '');
+
 // ---- Download state (shared by the chip, Profile and Chat) ----
 export type VoiceState = 'unknown' | 'missing' | 'downloading' | 'ready';
-export interface VoiceStatus { state: VoiceState; percent: number; error?: string }
+export interface VoiceStatus { state: VoiceState; percent: number; error?: string; phase?: string }
 const UNKNOWN: VoiceStatus = { state: 'unknown', percent: 0 };
 
 const statuses = new Map<string, VoiceStatus>();
@@ -52,15 +67,16 @@ const setStatus = (id: string, st: VoiceStatus) => { statuses.set(id, st); statu
 export const getVoiceStatus = (id: string): VoiceStatus => statuses.get(id) ?? UNKNOWN;
 export const subscribeVoiceStatus = (l: () => void) => { statusListeners.add(l); return () => { statusListeners.delete(l); }; };
 
+const existsOnDisk = async (id: string): Promise<boolean> => {
+  try { return (await FS.getInfoAsync(`${dirOf(id)}tokens.txt`)).exists; } catch { return false; }
+};
+
 /** Looks on disk and updates the status. Safe to call often. */
 export async function refreshVoiceStatus(id: string): Promise<VoiceStatus> {
   if (getVoiceStatus(id).state === 'downloading') return getVoiceStatus(id);
-  try {
-    const path = await getModelPath(ModelCategory.Tts, id);
-    setStatus(id, { state: path ? 'ready' : 'missing', percent: path ? 100 : 0 });
-  } catch {
-    setStatus(id, { state: 'missing', percent: 0 });
-  }
+  const ok = await existsOnDisk(id);
+  const prev = getVoiceStatus(id);
+  setStatus(id, { state: ok ? 'ready' : 'missing', percent: ok ? 100 : 0, error: ok ? undefined : prev.error });
   return getVoiceStatus(id);
 }
 
@@ -69,60 +85,76 @@ export async function isVoiceReady(lang: Lang, voiceId?: string): Promise<boolea
   return (await refreshVoiceStatus(v.id)).state === 'ready';
 }
 
+const fail = (id: string, msg: string) => { setStatus(id, { state: 'missing', percent: 0, error: msg }); return false; };
+
 export async function downloadVoice(id: string): Promise<boolean> {
   if (getVoiceStatus(id).state === 'downloading') return false;
-  setStatus(id, { state: 'downloading', percent: 0 });
+  if (!Native?.extractTarBz2) return fail(id, 'This build has no voice engine. Install the latest APK.');
+  const v = VOICES.find((x) => x.id === id);
+  if (!v) return fail(id, 'Unknown voice.');
+
+  setStatus(id, { state: 'downloading', percent: 0, phase: 'Downloading' });
   try {
-    await ensureModel(ModelCategory.Tts, id, {
-      onProgress: (p: { percent?: number }) => {
-        const pct = Math.max(0, Math.min(99, Math.round(p?.percent ?? 0)));
-        setStatus(id, { state: 'downloading', percent: pct });
-      },
-    });
+    await FS.makeDirectoryAsync(ROOT(), { intermediates: true }).catch(() => {});
+    await FS.deleteAsync(partOf(id), { idempotent: true }).catch(() => {});
+
+    let ok = false;
+    let err = '';
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      try {
+        const total = v.sizeMB * 1024 * 1024;
+        const job = FS.createDownloadResumable(voiceUrl(id), partOf(id), {}, (p) => {
+          const t = p.totalBytesExpectedToWrite > 0 ? p.totalBytesExpectedToWrite : total;
+          const pct = Math.max(0, Math.min(95, Math.round((p.totalBytesWritten / t) * 95)));
+          setStatus(id, { state: 'downloading', percent: pct, phase: 'Downloading' });
+        });
+        const r: any = await job.downloadAsync();
+        if (r && r.status === 200) ok = true;
+        else err = `Download failed (HTTP ${r?.status ?? '?'}). Check your internet and try again.`;
+      } catch (e: any) {
+        err = `Download failed: ${String(e?.message ?? e)}`;
+      }
+      if (!ok) await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+    }
+    if (!ok) { await FS.deleteAsync(partOf(id), { idempotent: true }).catch(() => {}); return fail(id, err); }
+
+    const info: any = await FS.getInfoAsync(partOf(id));
+    if (!info?.exists || (info.size ?? 0) < 1_000_000) {
+      await FS.deleteAsync(partOf(id), { idempotent: true }).catch(() => {});
+      return fail(id, 'The downloaded file is damaged. Try again.');
+    }
+
+    setStatus(id, { state: 'downloading', percent: 97, phase: 'Preparing' });
+    let extracted = false;
+    try { extracted = await Native.extractTarBz2(np(partOf(id)), np(dirOf(id))); } catch { extracted = false; }
+    await FS.deleteAsync(partOf(id), { idempotent: true }).catch(() => {});
+    if (!extracted || !(await existsOnDisk(id))) {
+      await FS.deleteAsync(dirOf(id), { idempotent: true }).catch(() => {});
+      return fail(id, 'Could not unpack the voice. Try again.');
+    }
     setStatus(id, { state: 'ready', percent: 100 });
     return true;
   } catch (e: any) {
-    setStatus(id, { state: 'missing', percent: 0, error: String(e?.message ?? e) });
-    return false;
+    return fail(id, String(e?.message ?? e));
   }
 }
 
 export async function removeVoice(id: string) {
-  if (loaded?.id === id) await unloadEngine();
-  try { await deleteModel(ModelCategory.Tts, id); } catch { /* already gone */ }
+  if (loadedId === id) { loadedId = null; try { Native?.release(); } catch { /* ignore */ } }
+  await FS.deleteAsync(dirOf(id), { idempotent: true }).catch(() => {});
   setStatus(id, { state: 'missing', percent: 0 });
 }
 
-// ---- One engine in memory at a time (a model is 60 to 100 MB of RAM) ----
-let loaded: { id: string; tts: StreamingTtsEngine } | null = null;
-let loading: Promise<StreamingTtsEngine> | null = null;
-let loadingId: string | null = null;
+// ---- One model in memory at a time (a model is 60 to 100 MB of RAM) ----
+let loadedId: string | null = null;
 
-async function unloadEngine() {
-  const old = loaded;
-  loaded = null;
-  if (old) { try { await old.tts.destroy(); } catch { /* ignore */ } }
-}
-
-async function getEngine(voice: VoiceInfo): Promise<StreamingTtsEngine> {
-  if (loaded?.id === voice.id) return loaded.tts;
-  if (loading && loadingId === voice.id) return loading;
-  // Wait for a load of another voice, then replace it.
-  if (loading) { try { await loading; } catch { /* ignore */ } }
-  loadingId = voice.id;
-  loading = (async () => {
-    const path = await getModelPath(ModelCategory.Tts, voice.id);
-    if (!path) throw new Error('Voice is not downloaded.');
-    await unloadEngine();
-    const tts = await createStreamingTTS({
-      modelPath: { type: 'file', path },
-      modelType: 'auto',
-      numThreads: 2,
-    });
-    loaded = { id: voice.id, tts };
-    return tts;
-  })();
-  try { return await loading; } finally { loading = null; loadingId = null; }
+async function ensureLoaded(voice: VoiceInfo): Promise<void> {
+  if (!Native) throw new Error('This build has no voice engine. Install the latest APK.');
+  if (loadedId === voice.id && Native.isReady()) return;
+  loadedId = null;
+  const ok = await Native.init(np(dirOf(voice.id)));
+  if (!ok) throw new Error('The voice could not start. Remove it and download it again.');
+  loadedId = voice.id;
 }
 
 // ---- One player for the whole app: only one message speaks at a time ----
@@ -136,65 +168,47 @@ export const subscribePlaying = (l: Listener) => { listeners.add(l); l(state); r
 export const nowPlaying = () => state.id;
 
 let token = 0;
-let active: { tts: StreamingTtsEngine; controller: TtsStreamController | null } | null = null;
+let jobCounter = 0;
+let activeJob = -1;
 let lastError: string | null = null;
 export const lastVoiceError = () => lastError;
 
-async function haltPlayer() {
-  const a = active;
-  active = null;
-  if (!a) return;
-  try { await a.controller?.cancel(); } catch { /* ignore */ }
-  try { await a.tts.stopPcmPlayer(); } catch { /* ignore */ }
+const idle = () => emit({ id: null, loading: false });
+
+if (Native?.addListener) {
+  Native.addListener('onStart', ({ id }: { id: number }) => { if (id === activeJob && state.id) emit({ id: state.id, loading: false }); });
+  Native.addListener('onDone', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
+  Native.addListener('onStopped', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
+  Native.addListener('onError', ({ id, message }: { id: number; message: string }) => {
+    if (id === activeJob) { activeJob = -1; lastError = message || 'Voice failed.'; idle(); }
+  });
 }
 
 export function stopSpeaking() {
   token++;
-  emit({ id: null, loading: false });
-  haltPlayer();
+  activeJob = -1;
+  try { Native?.stop(); } catch { /* ignore */ }
+  idle();
 }
 
-/** Speaks `text` (native script for Bangla and Hindi). Downloads nothing: call downloadVoice first. */
+/** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */
 export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
   const my = ++token;
   const voice = resolveVoice(lang, voiceId);
   lastError = null;
+  try { Native?.stop(); } catch { /* ignore */ }
+  activeJob = -1;
   emit({ id, loading: true });
-  const finish = () => { if (my === token) emit({ id: null, loading: false }); };
 
   (async () => {
-    await haltPlayer();
+    await ensureLoaded(voice);
     if (my !== token) return;
-    const tts = await getEngine(voice);
-    if (my !== token) return;
-    const sampleRate = await tts.getSampleRate();
-    await tts.startPcmPlayer(sampleRate, 1);
-    if (my !== token) { await tts.stopPcmPlayer(); return; }
-    active = { tts, controller: null };
-    let first = true;
-    const controller = await tts.generateSpeechStream(text, { sid: voice.sid, speed: 1.0 }, {
-      onChunk: (chunk: { samples: number[] }) => {
-        if (my !== token) return;
-        if (first) { first = false; emit({ id, loading: false }); }
-        if (chunk.samples.length > 0) tts.writePcmChunk(chunk.samples);
-      },
-      onEnd: async () => {
-        try { await tts.stopPcmPlayer(); } catch { /* ignore */ }
-        if (active?.tts === tts) active = null;
-        finish();
-      },
-      onError: async (e: { message?: string }) => {
-        lastError = e?.message ?? 'Voice failed.';
-        try { await tts.stopPcmPlayer(); } catch { /* ignore */ }
-        if (active?.tts === tts) active = null;
-        finish();
-      },
-    });
-    if (my === token && active?.tts === tts) active.controller = controller;
-    else { try { await controller.cancel(); } catch { /* ignore */ } }
+    activeJob = ++jobCounter;
+    Native.speak(activeJob, text, 1.0, voice.sid);
   })().catch((e: any) => {
+    if (my !== token) return;
     lastError = String(e?.message ?? e);
-    finish();
+    idle();
   });
 }
 
