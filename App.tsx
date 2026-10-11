@@ -11,13 +11,30 @@ try {
   Store = require('@react-native-async-storage/async-storage').default;
 } catch {}
 
+// Local notification when the app dies from a JS error (native crashes cannot notify).
+let Notif: any = null;
+try {
+  // @ts-ignore: require is provided by Metro
+  Notif = require('expo-notifications');
+  Notif.setNotificationHandler({
+    handleNotification: async () => ({ shouldShowAlert: true, shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
+  });
+  Notif.setNotificationChannelAsync?.('crash', { name: 'Crash reports', importance: Notif.AndroidImportance?.HIGH ?? 4 });
+} catch {}
+
 const g: any = globalThis;
 const prevHandler = g.ErrorUtils?.getGlobalHandler?.();
 g.ErrorUtils?.setGlobalHandler?.((err: any, isFatal?: boolean) => {
   try {
+    Notif?.scheduleNotificationAsync?.({
+      content: { title: 'One Fm crashed', body: String(err?.message ?? err).slice(0, 600) },
+      trigger: { channelId: 'crash' },
+    });
+  } catch {}
+  try {
     Store?.setItem(KEY, JSON.stringify({ m: String(err?.message ?? err), s: String(err?.stack ?? ''), fatal: !!isFatal, t: Date.now() }));
   } catch {}
-  setTimeout(() => prevHandler?.(err, isFatal), 500);
+  setTimeout(() => prevHandler?.(err, isFatal), 1000);
 });
 
 let Main: React.ComponentType | null = null;
@@ -58,6 +75,10 @@ class Boundary extends React.Component<{ children: React.ReactNode }, { error: u
 
 export default function App() {
   const [crash, setCrash] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    try { Notif?.requestPermissionsAsync?.(); } catch {}
+  }, []);
 
   useEffect(() => {
     if (!Store) { setCrash(null); return; }
