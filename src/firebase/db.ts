@@ -1,9 +1,18 @@
-import { getDatabase, ref, get, set, update } from '@react-native-firebase/database';
+import { getDatabase, ref, get, set, update, increment } from '@react-native-firebase/database';
+import { getAuth } from '@react-native-firebase/auth';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { Story } from '../types';
 import { SAMPLE_STORIES } from '../data/samples';
 
-const norm = (s: Story): Story => ({ ...s, genres: s.genres ?? [], characters: s.characters ?? [], episodes: s.episodes ?? [] });
+const norm = (s: Story): Story => ({
+  ...s,
+  genres: s.genres ?? [],
+  characters: s.characters ?? [],
+  episodes: s.episodes ?? [],
+  likeCount: s.likeCount ?? 0,
+  playCount: s.playCount ?? 0,
+  cover: s.cover ?? ['#2A2230', '#5A3A4A'],
+});
 
 /** Stories from Realtime Database. Falls back to bundled samples if empty or offline. */
 export async function fetchStories(): Promise<Story[]> {
@@ -11,7 +20,9 @@ export async function fetchStories(): Promise<Story[]> {
     const snap = await get(ref(getDatabase(), 'stories'));
     const v = snap.val() as Record<string, Story> | null;
     if (!v) return SAMPLE_STORIES;
-    return Object.values(v).map(norm);
+    // Counter updates can create partial nodes before seeding, so keep only complete stories.
+    const full = Object.values(v).filter((x) => x && typeof x.title === 'string').map(norm);
+    return full.length ? full : SAMPLE_STORIES;
   } catch {
     return SAMPLE_STORIES;
   }
@@ -37,4 +48,32 @@ export async function ensureUserProfile(u: FirebaseAuthTypes.User) {
       createdAt: Date.now(),
     });
   } catch {}
+}
+
+/** Counts a play for a story. Needs a signed-in user, silently skipped for guests. */
+export async function incrementPlay(storyId: string) {
+  if (!getAuth().currentUser) return;
+  try {
+    await update(ref(getDatabase()), { [`stories/${storyId}/playCount`]: increment(1) });
+  } catch {}
+}
+
+export async function isLiked(storyId: string): Promise<boolean> {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) return false;
+  try {
+    return (await get(ref(getDatabase(), `users/${uid}/likes/${storyId}`))).exists();
+  } catch {
+    return false;
+  }
+}
+
+/** Like or unlike in one atomic write: the user's like flag and the story counter change together. */
+export async function setLiked(storyId: string, liked: boolean) {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) throw new Error('Sign in to like stories.');
+  await update(ref(getDatabase()), {
+    [`users/${uid}/likes/${storyId}`]: liked ? true : null,
+    [`stories/${storyId}/likeCount`]: increment(liked ? 1 : -1),
+  });
 }

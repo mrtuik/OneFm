@@ -7,7 +7,7 @@ import { UserAvatar } from './UserAvatar';
 import { colors, TAB_BAR_HEIGHT } from '../theme';
 import type { User } from '../firebase/auth';
 
-const ICON = 26;
+const ICON = 22;
 
 export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: User | null }) {
   const insets = useSafeAreaInsets();
@@ -26,7 +26,7 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
         else if (route.name === 'Chats') icon = <ChatIcon size={ICON} color={color} />;
         else icon = (
           <View style={[s.ring, { borderColor: focused ? colors.accent : 'transparent' }]}>
-            <UserAvatar user={user} size={26} active={focused} />
+            <UserAvatar user={user} size={22} active={focused} />
           </View>
         );
         return (
@@ -49,9 +49,9 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
 }
 
 const s = StyleSheet.create({
-  bar: { flexDirection: 'row', backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: 12 },
-  item: { flex: 1, alignItems: 'center', gap: 4 },
-  iconBox: { height: 32, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 12, fontWeight: '600' },
-  ring: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  bar: { flexDirection: 'row', backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: 10 },
+  item: { flex: 1, alignItems: 'center', gap: 3 },
+  iconBox: { height: 28, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 10, fontWeight: '600' },
+  ring: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 });

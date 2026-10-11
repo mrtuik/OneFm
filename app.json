@@ -22,7 +22,7 @@
       [
         "expo-notifications",
         {
-          "color": "#F65151"
+          "color": "#E31A4E"
         }
       ],
       "./plugins/withReleaseSigning"

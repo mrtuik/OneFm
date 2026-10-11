@@ -49,12 +49,12 @@ try {
 function ErrorScreen({ title, text, onContinue }: { title: string; text: string; onContinue?: () => void }) {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#0A0A0A' }} contentContainerStyle={{ padding: 24, paddingTop: 64 }}>
-      <Text style={{ color: '#F65151', fontSize: 20, fontWeight: '800', marginBottom: 8 }}>{title}</Text>
+      <Text style={{ color: '#E31A4E', fontSize: 20, fontWeight: '800', marginBottom: 8 }}>{title}</Text>
       <Text style={{ color: '#B5A8A8', fontSize: 13, marginBottom: 16 }}>Screenshot this screen and send it.</Text>
       <Text selectable style={{ color: '#FEF4F4', fontSize: 12, fontFamily: 'monospace' }}>{text}</Text>
       {onContinue ? (
-        <Pressable onPress={onContinue} style={{ marginTop: 24, height: 48, borderRadius: 14, backgroundColor: '#F65151', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: '#0A0A0A', fontWeight: '700' }}>Clear and open app</Text>
+        <Pressable onPress={onContinue} style={{ marginTop: 24, height: 48, borderRadius: 14, backgroundColor: '#E31A4E', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Clear and open app</Text>
         </Pressable>
       ) : null}
     </ScrollView>

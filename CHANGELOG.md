@@ -1,5 +1,16 @@
 # One Fm changelog
 
+## V3
+- Story page rebuilt like the Pocket FM story page: gradient header, centered square poster with a plays ribbon, Like and Play Now buttons, stats row (plays, likes, episodes, rating), creator row, Episodes and Details tabs, Resume EP button, floating back and share buttons.
+- Accent color is now the Pocket FM pink (#E31A4E, sampled from the reference image) everywhere.
+- Bottom nav is smaller: 22 px icons, 10 px labels, shorter bar.
+- M2 Chat core: Chat screen (full-width AI text without bubbles, narration in italics, outlined user cards, character chip, choices, typing indicator, long press for copy, regenerate and delete), Ep counter, episode-end card, Chats tab list, Continue Chat row on Home, AI provider settings (Groq, OpenRouter, custom) with a secure API key and a test button, master prompt, structured JSON replies with one retry and a plain-text fallback.
+- M3 Memory: per-episode summary, fact extraction (importance 1 to 5), rolling summary merged every 10 episodes, top facts picked per turn, message limit per episode (default 40) that forces a suspense closing beat.
+- M4 Voice: voice chip with play button, waveform and duration, auto-play setting, voice picker with preview in Profile, install hint when no Bangla or Hindi voice exists. Uses the phone's text-to-speech voices. sherpa-onnx is not included yet.
+- Firebase: likes (atomic write of the user's like and the story counter), play counts, safer story loading, updated locked rules.
+- New dependencies: expo-secure-store, expo-speech, expo-clipboard (run `npx expo install --fix`).
+- README is now fully English.
+
 ## V2
 - Black theme restored (#0A0A0A background, #171313 cards). Accent #F65151 and text #FEF4F4 stay from the palette.
 - Bottom nav: removed the square highlight behind the active icon. Active tab is shown by color and bold label only.

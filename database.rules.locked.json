@@ -2,7 +2,11 @@
   "rules": {
     "stories": {
       ".read": true,
-      "$id": { ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid)" }
+      "$id": {
+        ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid)",
+        "playCount": { ".write": "auth != null", ".validate": "newData.isNumber()" },
+        "likeCount": { ".write": "auth != null", ".validate": "newData.isNumber() && newData.val() >= 0" }
+      }
     },
     "posts": {
       ".read": true,

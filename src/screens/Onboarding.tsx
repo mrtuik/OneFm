@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Logo } from '../components/Logo';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
 import { colors, radius, space } from '../theme';
-import { LANGS, LANG_LABEL, Lang, VOICES } from '../types';
+import { LANGS, LANG_LABEL, Lang } from '../types';
 import { useSettings } from '../state/settings';
 import { emailSignIn, emailSignUp, friendlyAuthError, googleSignIn } from '../firebase/auth';
 
@@ -85,10 +85,8 @@ export function LoginScreen() {
 }
 
 export function LanguageScreen() {
-  const { s: st, update } = useSettings();
+  const { update } = useSettings();
   const [lang, setLang] = useState<Lang>('bn');
-  const [vi, setVi] = useState(0);
-  const voices = VOICES[lang];
   return (
     <Frame>
       <Hero line="Which language do you prefer? Pick one now, you can change it later in Profile." />
@@ -97,19 +95,11 @@ export function LanguageScreen() {
           <Text style={s.label}>Reading language</Text>
           <View style={s.row}>
             {LANGS.map((l) => (
-              <Chip key={l} label={LANG_LABEL[l]} active={l === lang} onPress={() => { setLang(l); setVi(0); }} />
+              <Chip key={l} label={LANG_LABEL[l]} active={l === lang} onPress={() => setLang(l)} />
             ))}
           </View>
         </View>
-        <View style={{ gap: 10 }}>
-          <Text style={s.label}>Voice</Text>
-          <View style={s.row}>
-            {voices.map((v, i) => (
-              <Chip key={v} label={v} active={i === vi} onPress={() => setVi(i)} />
-            ))}
-          </View>
-        </View>
-        <GradientButton title="Continue" onPress={() => update({ language: lang, voice: voices[vi] })} />
+        <GradientButton title="Continue" onPress={() => update({ language: lang })} />
       </View>
     </Frame>
   );

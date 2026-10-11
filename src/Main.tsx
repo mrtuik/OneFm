@@ -12,10 +12,11 @@ import Home from './screens/Home';
 import Search from './screens/Search';
 import StoryDetail from './screens/StoryDetail';
 import Profile from './screens/Profile';
-import { Chats, Community, Library } from './screens/Stubs';
+import { Community, Library } from './screens/Stubs';
+import { Chats } from './screens/Chats';
+import Chat from './screens/Chat';
 import { AppHeader } from './components/AppHeader';
 import { TabBar } from './components/TabBar';
-import { BackButton } from './components/Ui';
 import { colors } from './theme';
 import type { User } from './firebase/auth';
 
@@ -62,17 +63,8 @@ function Root() {
         <Stack.Screen name="Tabs" options={{ headerShown: false }}>
           {() => <Tabs user={user} />}
         </Stack.Screen>
-        <Stack.Screen
-          name="StoryDetail"
-          component={StoryDetail}
-          options={({ navigation }) => ({
-            title: '',
-            presentation: 'modal',
-            headerTransparent: true,
-            headerShadowVisible: false,
-            headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
-          })}
-        />
+        <Stack.Screen name="StoryDetail" component={StoryDetail} options={{ headerShown: false }} />
+        <Stack.Screen name="Chat" component={Chat} options={{ headerShown: false }} />
         <Stack.Screen name="Profile" component={Profile} />
         <Stack.Screen name="Library" component={Library} />
       </Stack.Navigator>
