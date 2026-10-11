@@ -304,10 +304,11 @@ export default function Chat() {
   const renderItem = ({ item }: { item: ChatMessage }) => {
     if (item.role === 'user') {
       return (
-        <Pressable onLongPress={() => onLongPress(item)} style={s2.userCard}>
-          <Text style={s2.userLabel}>{roleLabel(chat?.userRole, t).toUpperCase()}</Text>
-          <Text style={[s2.userText, { fontSize: font, lineHeight: font * 1.5 }]}>{item.text}</Text>
-        </Pressable>
+        <View style={s2.userRow}>
+          <Pressable onLongPress={() => onLongPress(item)} style={s2.userBubble}>
+            <Text style={[s2.userText, { fontSize: font, lineHeight: font * 1.45 }]}>{item.text}</Text>
+          </Pressable>
+        </View>
       );
     }
     if (item.role === 'episode_end') {
@@ -467,8 +468,11 @@ export default function Chat() {
 
       <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={t.menuTitle}>
         <SheetItem icon="volume-mute-outline" label={t.stopVoice} onPress={() => { setMenuOpen(false); stopSpeaking(); }} />
+        <View style={s2.sheetDivider} />
         <SheetItem icon="person-outline" label={t.changeRole} onPress={() => { setMenuOpen(false); setPickerOpen(true); }} />
+        <View style={s2.sheetDivider} />
         <SheetItem icon="play-skip-forward-outline" label={t.nextEpisode} disabled={busy || empty || waitingNext} onPress={() => { setMenuOpen(false); nextEpisode(); }} />
+        <View style={s2.sheetDivider} />
         <SheetItem icon="refresh-outline" label={t.restart} danger onPress={() => { setMenuOpen(false); restart(); }} />
       </Sheet>
     </KeyboardAvoidingView>
@@ -489,11 +493,11 @@ const s2 = StyleSheet.create({
   ai: { gap: 8 },
   prepChip: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.card, backgroundColor: colors.surface },
   prepText: { color: colors.sub, fontSize: 13 },
-  userCard: { backgroundColor: colors.surface, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 6 },
-  userLabel: { color: colors.sub, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  userRow: { alignItems: 'flex-end' },
+  userBubble: { maxWidth: '82%', backgroundColor: '#3A1421', borderRadius: 8, borderTopRightRadius: 2, paddingHorizontal: 11, paddingVertical: 7 },
   userText: { color: colors.text },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: 'rgba(254,244,244,0.08)' },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(254,244,244,0.08)' },
   actionText: { color: colors.text, fontSize: 13, fontWeight: '600' },
   endWrap: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 },
   endLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
@@ -536,13 +540,14 @@ const s2 = StyleSheet.create({
   cancelPickText: { color: colors.sub, fontSize: 15, fontWeight: '600' },
 
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 10, paddingHorizontal: space.screen },
+  sheet: { backgroundColor: '#000000', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 10, paddingHorizontal: space.screen },
   handle: { alignSelf: 'center', width: 42, height: 4, borderRadius: 2, backgroundColor: 'rgba(254,244,244,0.28)', marginBottom: 16 },
   sheetTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 14, paddingHorizontal: 4 },
-  sheetList: { gap: 8 },
-  sheetItem: { flexDirection: 'row', alignItems: 'center', gap: 14, height: 60, paddingHorizontal: 10, borderRadius: 16, backgroundColor: 'rgba(254,244,244,0.05)' },
-  sheetItemDanger: { backgroundColor: colors.accentSoft },
-  sheetIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(254,244,244,0.08)', alignItems: 'center', justifyContent: 'center' },
-  sheetIconDanger: { backgroundColor: 'rgba(227,26,78,0.18)' },
+  sheetList: { backgroundColor: colors.surface, borderRadius: 16, overflow: 'hidden' },
+  sheetDivider: { height: StyleSheet.hairlineWidth, marginLeft: 66, backgroundColor: colors.line },
+  sheetItem: { flexDirection: 'row', alignItems: 'center', gap: 14, height: 62, paddingHorizontal: 12 },
+  sheetItemDanger: {},
+  sheetIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(254,244,244,0.09)', alignItems: 'center', justifyContent: 'center' },
+  sheetIconDanger: { backgroundColor: colors.accentSoft },
   sheetItemText: { color: colors.text, fontSize: 16, fontWeight: '600' },
 });

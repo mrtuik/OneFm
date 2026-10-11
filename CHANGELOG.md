@@ -1,5 +1,16 @@
 # One Fm changelog
 
+## V6.9.10
+- Voice numbers (model, first sound, audio made, level, rms, dc) are gone from chat and Profile, and the small info icon is gone too. Real errors still show under the voice.
+- Your message is now a WhatsApp-style bubble: right side, no name label, smaller corners, tight padding. The voice chip and the Next / Again / Next episode buttons have smaller corners too.
+- Chat options sheet redesigned: black sheet, one single card with all four options, thin dividers between them, and each icon in its own small rounded card. Restart stays pink.
+- Story prompt (Banglish): one pronoun level for the whole story. Every character says tumi, never tui/tor/tore, and the verbs match.
+
+## V6.9.9
+- Fix: the error "Android did not start the audio output (position stayed at 0)" appeared even when the voice played. Some phones do not report the play position after stop(). The player now trusts the clock when the position does not move, and the false error is gone. Real errors (refused write, no audio made) still show.
+- Voice starts earlier. Before, nothing played until the whole message was made (12.9 s of audio took 23.7 s, so the first sound came after 23.8 s). Now sentences go to a player thread as they are made, and playback starts as soon as the audio already made lasts longer than the time still needed for the rest (estimated from the speed measured on the phone). Same message: first sound after about 11 s, and it never stops in the middle. Replays still start at 0 s from memory.
+- The numbers line (model, first sound, audio made, level, rms, dc) is no longer printed under the voice in chat or in Profile. A small info icon appears next to the voice; tap it to show or hide the numbers. Errors still show directly.
+
 ## V6.9.8
 - Voice silence fixed at the root (Profile preview and chat both). The native player used a 20 second AudioTrack buffer. Android does not start a stream track until its buffer has been filled once, and a 4 to 7 second message never fills 20 seconds, so nothing was heard, the screen still showed the stop icon / played state, and the track was released at the end with no error. Now the buffer is about 1 second, audio is 16-bit PCM (works on every phone), and stop() is called after the last write so Android plays out whatever is left.
 - The player no longer fails silently: a refused write or an output that never started now shows the real reason under the voice (before, it just said done).

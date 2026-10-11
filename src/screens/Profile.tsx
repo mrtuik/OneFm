@@ -11,7 +11,7 @@ import { logout, useAuthUser } from '../firebase/auth';
 import { seedStories } from '../firebase/db';
 import { PRESETS, Preset, ProviderSettings, testConnection } from '../ai/provider';
 import { getApiKey, setApiKey } from '../ai/secure';
-import { VoiceInfo, downloadVoice, getVoiceError, getVoiceInfo, subscribeVoiceError, warmVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
+import { VoiceInfo, downloadVoice, getVoiceError, subscribeVoiceError, warmVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
 
 const SAMPLE: Record<Lang, string> = {
@@ -51,8 +51,7 @@ function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; o
   useEffect(() => subscribePlaying((p) => { setPlaying(p.id === 'preview:' + v.id && !p.loading); setPreparing(p.id === 'preview:' + v.id && p.loading); }), [v.id]);
   useEffect(() => { if (chosen && st.state === 'ready') warmVoice(lang, v.id); }, [chosen, st.state, lang, v.id]);
   const [err, setErr] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  useEffect(() => { const f = () => { setErr(getVoiceError('preview:' + v.id)); setInfo(getVoiceInfo('preview:' + v.id)); }; f(); return subscribeVoiceError(f); }, [v.id]);
+  useEffect(() => { const f = () => { setErr(getVoiceError('preview:' + v.id)); }; f(); return subscribeVoiceError(f); }, [v.id]);
   const ready = st.state === 'ready';
   const confirmRemove = () => Alert.alert('Remove this voice?', `${v.name} will be deleted from this phone (${v.sizeMB} MB). You can download it again later.`, [
     { text: 'Cancel', style: 'cancel' },
@@ -67,7 +66,6 @@ function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; o
           <Text style={[s.hint, !!err && ready && { color: colors.accent }]}>
             {st.state === 'downloading' ? `${st.phase ?? 'Downloading'} ${st.percent}%` : ready ? (err ?? (preparing ? 'Getting the voice ready...' : 'Ready, works offline')) : st.error ? st.error : `${v.sizeMB} MB download`}
           </Text>
-          {info && ready ? <Text style={s.hint}>{info}</Text> : null}
         </View>
       </Pressable>
       {st.state === 'downloading' ? <ActivityIndicator color={colors.accent} /> : ready ? (

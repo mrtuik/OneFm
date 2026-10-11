@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '../theme';
 import { Lang } from '../types';
-import { downloadVoice, estimateSeconds, getVoiceError, getVoiceInfo, resolveVoice, speak, stopSpeaking, subscribePlaying, subscribeVoiceError } from '../voice/engine';
+import { downloadVoice, estimateSeconds, getVoiceError, resolveVoice, speak, stopSpeaking, subscribePlaying, subscribeVoiceError } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
 
 const BARS = [6, 12, 8, 16, 10, 14, 6, 12, 18, 9, 13, 7, 15, 10, 6, 12, 17, 8, 11, 14, 7, 10, 16, 9];
@@ -19,8 +19,7 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
   const total = estimateSeconds(text);
   const started = useRef(0);
   const [err, setErr] = useState<string | null>(getVoiceError(id));
-  const [info, setInfo] = useState<string | null>(getVoiceInfo(id));
-  useEffect(() => { const f = () => { setErr(getVoiceError(id)); setInfo(getVoiceInfo(id)); }; f(); return subscribeVoiceError(f); }, [id]);
+  useEffect(() => { const f = () => { setErr(getVoiceError(id)); }; f(); return subscribeVoiceError(f); }, [id]);
 
   useEffect(() => subscribePlaying((p) => { setPlaying(p.id === id && !p.loading); setPreparing(p.id === id && p.loading); }), [id]);
 
@@ -54,22 +53,25 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
 
   return (
     <View style={{ alignSelf: 'flex-start', maxWidth: '100%' }}>
-      <Pressable onPress={onPress} style={s.chip} accessibilityRole="button" accessibilityLabel={playing ? 'Stop voice' : 'Play voice'}>
-        <View style={s.play}>
-          {preparing ? <ActivityIndicator size="small" color={colors.onAccent} /> : <Ionicons name={playing ? 'pause' : 'play'} size={14} color={colors.onAccent} style={playing ? undefined : { marginLeft: 1 }} />}
-        </View>
-        <View style={s.wave}>
-          {BARS.map((h, i) => <View key={i} style={{ width: 3, height: h, borderRadius: 2, backgroundColor: playing && i < upto ? colors.accent : colors.line }} />)}
-        </View>
-        <Text style={s.time}>{fmt(playing ? Math.round(progress * total) : total)}</Text>
-      </Pressable>
-      {err ? <Text style={s.err}>{err}</Text> : info ? <Text style={s.info}>{info}</Text> : null}
+      <View style={s.row}>
+        <Pressable onPress={onPress} style={s.chip} accessibilityRole="button" accessibilityLabel={playing ? 'Stop voice' : 'Play voice'}>
+          <View style={s.play}>
+            {preparing ? <ActivityIndicator size="small" color={colors.onAccent} /> : <Ionicons name={playing ? 'pause' : 'play'} size={14} color={colors.onAccent} style={playing ? undefined : { marginLeft: 1 }} />}
+          </View>
+          <View style={s.wave}>
+            {BARS.map((h, i) => <View key={i} style={{ width: 3, height: h, borderRadius: 2, backgroundColor: playing && i < upto ? colors.accent : colors.line }} />)}
+          </View>
+          <Text style={s.time}>{fmt(playing ? Math.round(progress * total) : total)}</Text>
+        </Pressable>
+      </View>
+      {err ? <Text style={s.err}>{err}</Text> : null}
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'flex-start', maxWidth: '100%', paddingVertical: 8, paddingLeft: 8, paddingRight: 14, borderRadius: radius.card, backgroundColor: colors.surface },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', maxWidth: '100%' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'flex-start', maxWidth: '100%', paddingVertical: 6, paddingLeft: 6, paddingRight: 12, borderRadius: 8, backgroundColor: colors.surface },
   play: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   wave: { flexDirection: 'row', alignItems: 'center', gap: 2.5, height: 20 },
   time: { color: colors.sub, fontSize: 12, fontVariant: ['tabular-nums'] },

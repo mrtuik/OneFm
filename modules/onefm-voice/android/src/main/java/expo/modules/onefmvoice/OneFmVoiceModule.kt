@@ -26,6 +26,11 @@ import java.nio.ByteOrder
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * On-device text to speech with sherpa-onnx (VITS models: Piper, Mimic3, Coqui, MMS).
@@ -291,8 +296,10 @@ class OneFmVoiceModule : Module() {
 
     Function("hasCache") { key: String -> key.isNotEmpty() && memCache.containsKey(key) }
 
-    // Speaks one text. The whole text is generated first (sentence by sentence), levelled once, then played from the start
-    // in one go. A text that was spoken before starts at once from memory.
+    // Speaks one text. Sentences are generated one by one and handed to a player thread through a queue.
+    // The player starts as soon as the audio made so far is enough to last until generation finishes (estimated from the
+    // speed measured on this phone), so the voice starts earlier than "after everything" and still never stops in the middle.
+    // A text that was spoken before starts at once from memory.
     Function("speak") { id: Int, text: String, speed: Float, sid: Int, cacheKey: String ->
       val memKey = if (cacheKey.isEmpty()) "" else "$cacheKey:$sid:$speed"
       val memHit = if (memKey.isNotEmpty()) memCache[memKey] else null
@@ -314,131 +321,201 @@ class OneFmVoiceModule : Module() {
       playExecutor.submit {
         activeId = id
         cancelled = false
-        var track: AudioTrack? = null
-        var started = false
-        var totalFrames = 0
+        val queue = LinkedBlockingQueue<FloatArray>()
+        val endMark = FloatArray(0)
+        val writerError = AtomicReference<String?>(null)
+        val startedFlag = AtomicBoolean(false)
+        val writtenFrames = AtomicLong(0L)
+        var writer: Thread? = null
+        var sr = 0
         var peak = 0f
+        var rawPeak = 0f
+        var sumSq = 0.0
+        var totalSamples = 0L
+        var dcMax = 0f
+        var bad = 0
+        var genMs = 0L
+        var track: AudioTrack? = null
         try {
           requestAudioFocus()
           val mediaVolume = try {
             (appContext.reactContext?.applicationContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 1
           } catch (e: Exception) { 1 }
 
-          var audio: FloatArray? = memHit?.first
-          var sr: Int = memHit?.second ?: 0
-          var rawPeak = 0f
-          var rms = 0.0
-          var dc = 0f
-          var bad = 0
-          var genMs = 0L
+          fun live() = !cancelled && activeId == id && writerError.get() == null
 
-          if (audio == null && currentTts != null) {
-            // ---- Generate the whole text first ----
+          // ---- Player thread: takes finished pieces from the queue and writes them to the speaker ----
+          fun startWriter() {
+            if (writer != null) return
+            val w = Thread {
+              try {
+                val t = buildTrack(sr)
+                track = t
+                currentAudioTrack = t
+                startedFlag.set(true)
+                sendEvent("onStart", mapOf("id" to id))
+                try { t.setVolume(1.0f) } catch (e: Exception) { }
+                t.play()
+                val playStart = System.currentTimeMillis()
+                val chunk = ShortArray(4096)
+                var ended = false
+                while (!ended && !cancelled && activeId == id) {
+                  val item = queue.poll(100, TimeUnit.MILLISECONDS) ?: continue
+                  if (item === endMark) { ended = true; break }
+                  var pos = 0
+                  while (pos < item.size && !cancelled && activeId == id) {
+                    val n = minOf(chunk.size, item.size - pos)
+                    for (i in 0 until n) {
+                      val v = item[pos + i]
+                      val c = if (v > 1f) 1f else if (v < -1f) -1f else v
+                      chunk[i] = (c * 32767f).toInt().toShort()
+                    }
+                    var off = 0
+                    while (off < n && !cancelled && activeId == id) {
+                      val wr = t.write(chunk, off, n - off, AudioTrack.WRITE_BLOCKING)
+                      if (wr < 0) throw RuntimeException("Android refused the audio (write error $wr).")
+                      if (wr == 0) { Thread.sleep(5); continue }
+                      off += wr
+                    }
+                    pos += n
+                    writtenFrames.addAndGet(n.toLong())
+                  }
+                }
+                if (ended && !cancelled && activeId == id) {
+                  // Play what is left in the buffer, then stop. This also starts a track that never filled its buffer.
+                  try { t.stop() } catch (e: Exception) { }
+                  val total = writtenFrames.get()
+                  val durMs = total * 1000L / maxOf(sr, 1)
+                  var headMoved = false
+                  var lastHead = -1
+                  var lastMove = System.currentTimeMillis()
+                  while (!cancelled && activeId == id) {
+                    val head = t.playbackHeadPosition
+                    val now = System.currentTimeMillis()
+                    if (head >= total) break
+                    if (head > 0) headMoved = true
+                    if (head != lastHead) { lastHead = head; lastMove = now }
+                    // Some phones do not report the play position: then trust the clock instead of the position.
+                    if (!headMoved && now - playStart > durMs + 1500) break
+                    if (headMoved && now - lastMove > 2500) break
+                    Thread.sleep(15)
+                  }
+                  if (!cancelled && activeId == id) Thread.sleep(150) // let the last samples leave the speaker
+                }
+              } catch (e: Throwable) {
+                writerError.compareAndSet(null, e.message ?: "Playback failed")
+              }
+            }
+            w.isDaemon = true
+            writer = w
+            w.start()
+          }
+
+          fun account(a: FloatArray, lv: Leveled) {
+            if (lv.rawPeak > rawPeak) rawPeak = lv.rawPeak
+            if (lv.peak > peak) peak = lv.peak
+            sumSq += lv.rms * lv.rms * a.size
+            totalSamples += a.size
+            if (kotlin.math.abs(lv.dc) > dcMax) dcMax = kotlin.math.abs(lv.dc)
+            bad += lv.bad
+          }
+
+          val whole = ArrayList<FloatArray>()
+
+          if (memHit != null) {
+            // ---- Replay from memory: starts at once ----
+            sr = memHit.second
+            val audio = memHit.first
+            for (v in audio) { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
+            rawPeak = peak
+            totalSamples = audio.size.toLong()
+            queue.offer(audio)
+            startWriter()
+          } else if (currentTts != null) {
+            // ---- Generate sentence by sentence; start playing as soon as it is safe ----
             sr = currentTts.sampleRate()
             val t0 = System.currentTimeMillis()
             val chunks = splitText(text)
-            val parts = ArrayList<FloatArray>()
+            val totalChars = maxOf(1, chunks.sumOf { it.length })
+            var charsDone = 0
+            var queuedFrames = 0L
             val gap = FloatArray(sr * 12 / 100) // 120 ms of silence between sentences
             synchronized(genLock) {
               for ((ci, chunk) in chunks.withIndex()) {
-                if (cancelled || activeId != id) break
+                if (!live()) break
+                val parts = ArrayList<FloatArray>()
                 if (ci > 0) parts.add(gap)
                 currentTts.generateWithCallback(chunk, sid = sid, speed = speed, callback = { samples ->
-                  if (cancelled || activeId != id) {
+                  if (!live()) {
                     0
                   } else {
                     if (samples.isNotEmpty()) parts.add(samples.copyOf())
                     1
                   }
                 })
+                if (!live()) break
+                var total = 0
+                for (c in parts) total += c.size
+                if (total > 0) {
+                  val piece = FloatArray(total)
+                  var o = 0
+                  for (c in parts) { System.arraycopy(c, 0, piece, o, c.size); o += c.size }
+                  val lv = levelAudio(piece)
+                  account(piece, lv)
+                  whole.add(piece)
+                  queue.offer(piece)
+                  queuedFrames += piece.size
+                }
+                charsDone += chunk.length
+                if (writer == null) {
+                  // Start when the audio we already have lasts longer than the time still needed to make the rest.
+                  val elapsed = System.currentTimeMillis() - t0
+                  val remainingChars = totalChars - charsDone
+                  val estRemainingMs = if (charsDone > 0) elapsed.toDouble() * remainingChars / charsDone else 0.0
+                  val queuedMs = queuedFrames * 1000.0 / sr
+                  if (queuedFrames > 0 && (remainingChars <= 0 || queuedMs >= estRemainingMs * 1.15 + 300.0)) startWriter()
+                }
               }
             }
             genMs = System.currentTimeMillis() - t0
-            if (!cancelled && activeId == id) {
-              var total = 0
-              for (c in parts) total += c.size
-              if (total > 0) {
+            if (queuedFrames == 0L && live()) {
+              // nothing was made: fall through to the "no audio" message below
+            } else if (live()) {
+              // Cache the whole message (already levelled) for instant replays
+              if (memKey.isNotEmpty() && peak >= 0.01f) {
+                var total = 0
+                for (c in whole) total += c.size
                 val all = FloatArray(total)
                 var o = 0
-                for (c in parts) { System.arraycopy(c, 0, all, o, c.size); o += c.size }
-                val lv = levelAudio(all)
-                rawPeak = lv.rawPeak; peak = lv.peak; rms = lv.rms; dc = lv.dc; bad = lv.bad
-                audio = all
-                if (memKey.isNotEmpty() && lv.peak >= 0.01f) memCache[memKey] = Pair(all, sr)
+                for (c in whole) { System.arraycopy(c, 0, all, o, c.size); o += c.size }
+                memCache[memKey] = Pair(all, sr)
               }
-            }
-          } else if (audio != null) {
-            for (v in audio) { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
-            rawPeak = peak
-          }
-
-          // ---- Play it from the start ----
-          val out = audio
-          if (!cancelled && activeId == id && out != null && out.isNotEmpty() && sr > 0) {
-            val t = buildTrack(sr)
-            track = t
-            currentAudioTrack = t
-            started = true
-            sendEvent("onStart", mapOf("id" to id))
-            try { t.setVolume(1.0f) } catch (e: Exception) { }
-            t.play()
-            var pos = 0
-            val chunk = ShortArray(4096)
-            while (!cancelled && activeId == id && pos < out.size) {
-              val n = minOf(chunk.size, out.size - pos)
-              for (i in 0 until n) {
-                val v = out[pos + i]
-                val c = if (v > 1f) 1f else if (v < -1f) -1f else v
-                chunk[i] = (c * 32767f).toInt().toShort()
-              }
-              var off = 0
-              while (off < n && !cancelled && activeId == id) {
-                val w = t.write(chunk, off, n - off, AudioTrack.WRITE_BLOCKING)
-                if (w < 0) throw RuntimeException("Android refused the audio (write error $w).")
-                if (w == 0) { Thread.sleep(5); continue }
-                off += w
-              }
-              pos += n
-              totalFrames += n
-            }
-            // Everything is written. stop() on a stream track means "play what is left, then stop":
-            // it also starts a track that never filled its buffer (short messages).
-            if (!cancelled && activeId == id) {
-              try { t.stop() } catch (e: Exception) { }
-              sendEvent("onInfo", mapOf(
-                "id" to id,
-                "gen" to genMs.toInt(),
-                "audio" to (totalFrames.toDouble() / sr),
-                "raw" to rawPeak.toDouble(),
-                "peak" to peak.toDouble(),
-                "rms" to rms,
-                "dc" to dc.toDouble()
-              ))
             }
           }
 
-          // Wait until everything written has been played. If the position never moves, say so (no silent failure).
-          var lastHead = 0
-          var neverMoved = false
-          val t = track
-          if (t != null && started && !cancelled && activeId == id) {
-            var lastMove = System.currentTimeMillis()
-            lastHead = -1
-            while (!cancelled && activeId == id) {
-              val head = t.playbackHeadPosition
-              if (head >= totalFrames) { lastHead = head; break }
-              val now = System.currentTimeMillis()
-              if (head != lastHead) { lastHead = head; lastMove = now }
-              else if (now - lastMove > 4000) { neverMoved = lastHead <= 0; break }
-              Thread.sleep(15)
-            }
-            if (!cancelled && activeId == id && !neverMoved) Thread.sleep(150) // let the last samples leave the speaker
+          // ---- Tell the player there is no more, make sure it is running, and wait for it to finish ----
+          if (live()) {
+            queue.offer(endMark)
+            startWriter()
           }
+          if (live() || writer != null) {
+            sendEvent("onInfo", mapOf(
+              "id" to id,
+              "gen" to genMs.toInt(),
+              "audio" to (totalSamples.toDouble() / maxOf(sr, 1)),
+              "raw" to rawPeak.toDouble(),
+              "peak" to peak.toDouble(),
+              "rms" to Math.sqrt(sumSq / maxOf(totalSamples, 1L)),
+              "dc" to dcMax.toDouble()
+            ))
+          }
+          writer?.join()
 
+          val err = writerError.get()
           if (!cancelled && activeId == id) {
-            val silent = started && totalFrames > 0 && peak < 0.01f
-            if (!started) sendEvent("onError", mapOf("id" to id, "message" to "The voice produced no audio. The text may contain letters this voice cannot read."))
-            else if (neverMoved) sendEvent("onError", mapOf("id" to id, "message" to "Android did not start the audio output (position stayed at 0). Check media volume and Bluetooth, then try again."))
+            val silent = startedFlag.get() && totalSamples > 0 && peak < 0.01f
+            if (err != null) sendEvent("onError", mapOf("id" to id, "message" to err))
+            else if (!startedFlag.get()) sendEvent("onError", mapOf("id" to id, "message" to "The voice produced no audio. The text may contain letters this voice cannot read."))
             else if (silent && mediaVolume == 0) sendEvent("onError", mapOf("id" to id, "message" to "Media volume is 0. Turn the phone's media volume up."))
             else if (silent) sendEvent("onError", mapOf("id" to id, "message" to String.format("The voice made no sound (loudest sample %.4f, %d bad samples, %d Hz). Try another voice in Profile.", peak, bad, sr)))
             else sendEvent("onDone", mapOf("id" to id))
