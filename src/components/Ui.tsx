@@ -13,10 +13,10 @@ export function GradientButton({ title, onPress, disabled, style }: { title: str
   );
 }
 
-/** Outline = you. Anything that belongs to the user is drawn as an outline. */
+/** Soft filled button (no outline). */
 export function OutlineButton({ title, onPress, style, icon }: { title: string; onPress: () => void; style?: ViewStyle; icon?: IconName }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [s.outline, pressed && { backgroundColor: colors.surface }, style]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [s.outline, pressed && { backgroundColor: '#1F1A1A' }, style]}>
       {icon ? <Ionicons name={icon} size={20} color={colors.text} /> : null}
       <Text style={s.outlineText}>{title}</Text>
     </Pressable>
@@ -25,7 +25,7 @@ export function OutlineButton({ title, onPress, style, icon }: { title: string; 
 
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[s.chip, active && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}>
+    <Pressable onPress={onPress} style={[s.chip, active && { backgroundColor: colors.accentSoft }]}>
       <Text style={[s.chipText, active && { color: colors.accent }]}>{label}</Text>
     </Pressable>
   );
@@ -57,9 +57,9 @@ const s = StyleSheet.create({
   btn: { height: 52, borderRadius: radius.btn, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   btnDisabled: { backgroundColor: colors.surface },
   btnText: { color: colors.onAccent, fontSize: 16, fontWeight: '700' },
-  outline: { height: 52, borderRadius: radius.btn, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
+  outline: { height: 52, borderRadius: radius.btn, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
   outlineText: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.chip, borderWidth: 1.5, borderColor: colors.line },
+  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.chip, backgroundColor: colors.surface },
   chipText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   back: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.scrim, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },

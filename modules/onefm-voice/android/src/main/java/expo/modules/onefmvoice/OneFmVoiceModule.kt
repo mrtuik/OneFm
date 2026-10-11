@@ -6,6 +6,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.audiofx.LoudnessEnhancer
 import android.os.Build
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
@@ -40,6 +41,26 @@ class OneFmVoiceModule : Module() {
   @Volatile private var cancelled: Boolean = false
   @Volatile private var currentAudioTrack: AudioTrack? = null
   private var audioFocusRequest: Any? = null
+  @Volatile private var gain = 1.0f
+  @Volatile private var liveEnhancer: LoudnessEnhancer? = null
+
+  // Sound boost 1x..4x -> 0..+15 dB. The phone's LoudnessEnhancer raises the average loudness (same as SHEETMD),
+  // which is what makes a quiet voice clearly louder.
+  private fun releaseEnhancer() {
+    try { liveEnhancer?.release() } catch (e: Exception) { }
+    liveEnhancer = null
+  }
+
+  private fun attachEnhancer(track: AudioTrack) {
+    releaseEnhancer()
+    if (gain <= 1.0f) return
+    try {
+      val e = LoudnessEnhancer(track.audioSessionId)
+      e.setTargetGain((((gain - 1.0f) / 3.0f) * 1500f).toInt().coerceIn(0, 1500))
+      e.enabled = true
+      liveEnhancer = e
+    } catch (ex: Exception) { }
+  }
 
   private fun requestAudioFocus() {
     val ctx = appContext.reactContext?.applicationContext ?: return
@@ -152,7 +173,7 @@ class OneFmVoiceModule : Module() {
     val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
     // 20 s of buffer so generation can run ahead of playback
     val bufSize = maxOf(minBuf, sampleRate * 4 * 20)
-    return AudioTrack.Builder()
+    val built = AudioTrack.Builder()
       .setAudioAttributes(
         AudioAttributes.Builder()
           .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -169,12 +190,14 @@ class OneFmVoiceModule : Module() {
       .setBufferSizeInBytes(bufSize)
       .setTransferMode(AudioTrack.MODE_STREAM)
       .build()
+    attachEnhancer(built)
+    return built
   }
 
   // Some models hand over the whole text as one block, so the voice would stay silent until everything is
   // generated. Cutting the text into short sentences here makes the first audio ready after the first one.
   private fun splitText(text: String): List<String> {
-    val sentences = text.trim().split(Regex("(?<=[.])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
+    val sentences = text.trim().split(Regex("(?<=[.\u0964?!])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
     val pieces = ArrayList<String>()
     for (sentence in sentences) {
       if (sentence.length <= 130) { pieces.add(sentence); continue }
@@ -255,6 +278,8 @@ class OneFmVoiceModule : Module() {
     }
 
     Function("stop") { stopPlayback() }
+
+    Function("setGain") { g: Float -> gain = g.coerceIn(1.0f, 4.0f) }
 
     Function("hasCache") { key: String ->
       val f = cacheFile(key)
@@ -451,6 +476,7 @@ class OneFmVoiceModule : Module() {
           try { out?.close() } catch (e: Exception) { }
           if (!saved) { try { tmp?.delete() } catch (e: Exception) { } }
           try { track?.stop(); track?.release() } catch (e: Exception) { }
+          releaseEnhancer()
           if (currentAudioTrack === track) currentAudioTrack = null
           abandonAudioFocus()
           if (activeId == id) activeId = -1

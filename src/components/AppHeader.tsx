@@ -27,7 +27,7 @@ export function AppHeader() {
 
 const s = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 10, backgroundColor: colors.bg },
-  avatar: { width: 38, height: 38, borderRadius: 19, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   lib: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   center: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { color: colors.text, fontSize: 18, fontWeight: '800', letterSpacing: 0.3 },

@@ -1,5 +1,13 @@
 # One Fm changelog
 
+## V6.9
+- Voice fixed, taken from how SHEETMD speaks: new "Phone voice (Google)" for Bangla, Hindi and English. It uses the phone's own text-to-speech (expo-speech), needs no download, and is the default for Bangla and Hindi. Old saved Bangla and Hindi voice choices are reset once so the silent sherpa voice is no longer selected.
+- If a downloaded sherpa voice makes no sound, fails, or cannot start, the same message is read at once by the phone voice instead of staying silent. (Only "media volume is 0" is still shown as a message.)
+- Louder sound: the sherpa player now uses the phone's LoudnessEnhancer (+10 dB, same as SHEETMD) so quiet voices are clearly audible at normal volume. Text is also cut at the Bangla danda, ? and !, so playback starts sooner.
+- No outlines anywhere: buttons, chips, voice chip, your message card, composer chip, Profile voice rows and fields, age check, story page and the tab bar avatar ring are soft filled shapes now. Selected items use a pink tint instead of a border. The header divider line is gone.
+- App icon: the pen is smaller on a full black fill (launcher icon and adaptive icon).
+- New: expo-speech dependency and the withTtsQueries plugin (Android 11+ needs it to see Google Speech Services).
+
 ## V6.8.1
 - App icon: the pen is bigger in the launcher icon (adaptive and legacy), so the icon looks full.
 - Voice silence: every message is now checked for sound. If a voice makes no sound, the chip shows the exact reason under it (media volume is 0, the voice text is in English letters, or the voice produced silent audio with its loudest sample level) instead of playing silence. Silent audio is no longer saved, so it cannot replay silence for the same text.

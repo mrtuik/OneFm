@@ -11,7 +11,7 @@ import { logout, useAuthUser } from '../firebase/auth';
 import { seedStories } from '../firebase/db';
 import { PRESETS, Preset, ProviderSettings, testConnection } from '../ai/provider';
 import { getApiKey, setApiKey } from '../ai/secure';
-import { VoiceInfo, downloadVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
+import { VoiceInfo, downloadVoice, isPhoneVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
 
 const SAMPLE: Record<Lang, string> = {
@@ -48,19 +48,20 @@ function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; o
   const st = useVoiceStatus(v.id);
   const [playing, setPlaying] = useState(false);
   useEffect(() => subscribePlaying((p) => setPlaying(p.id === 'preview:' + v.id)), [v.id]);
+  const phone = isPhoneVoice(v.id);
   const ready = st.state === 'ready';
   const confirmRemove = () => Alert.alert('Remove this voice?', `${v.name} will be deleted from this phone (${v.sizeMB} MB). You can download it again later.`, [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Remove', style: 'destructive', onPress: () => removeVoice(v.id) },
   ]);
   return (
-    <View style={[s.voiceRow, chosen && { borderColor: colors.accent }]}>
+    <View style={[s.voiceRow, chosen && { backgroundColor: colors.accentSoft }]}>
       <Pressable onPress={ready ? onUse : undefined} style={s.voiceMain} accessibilityRole="radio" accessibilityState={{ selected: chosen }}>
         <Ionicons name={chosen ? 'radio-button-on' : 'radio-button-off'} size={20} color={chosen ? colors.accent : colors.sub} />
         <View style={{ flex: 1 }}>
           <Text style={s.voiceName}>{v.name}</Text>
           <Text style={s.hint}>
-            {st.state === 'downloading' ? `${st.phase ?? 'Downloading'} ${st.percent}%` : ready ? 'Ready, works offline' : st.error ? st.error : `${v.sizeMB} MB download`}
+            {phone ? 'Built into the phone, no download' : st.state === 'downloading' ? `${st.phase ?? 'Downloading'} ${st.percent}%` : ready ? 'Ready, works offline' : st.error ? st.error : `${v.sizeMB} MB download`}
           </Text>
         </View>
       </Pressable>
@@ -69,9 +70,11 @@ function VoiceRow({ v, chosen, onUse, lang }: { v: VoiceInfo; chosen: boolean; o
           <Pressable hitSlop={8} onPress={() => (playing ? stopSpeaking() : speak('preview:' + v.id, SAMPLE[lang], lang, v.id))} accessibilityLabel="Preview voice">
             <Ionicons name={playing ? 'stop-circle-outline' : 'play-circle-outline'} size={28} color={colors.text} />
           </Pressable>
-          <Pressable hitSlop={8} onPress={confirmRemove} accessibilityLabel="Remove voice">
-            <Ionicons name="trash-outline" size={22} color={colors.sub} />
-          </Pressable>
+          {phone ? null : (
+            <Pressable hitSlop={8} onPress={confirmRemove} accessibilityLabel="Remove voice">
+              <Ionicons name="trash-outline" size={22} color={colors.sub} />
+            </Pressable>
+          )}
         </View>
       ) : (
         <Pressable hitSlop={8} onPress={async () => { const ok = await downloadVoice(v.id); if (ok && !chosen) onUse(); }} style={s.dl} accessibilityLabel="Download voice">
@@ -151,7 +154,7 @@ export default function Profile() {
         </View>
       </Section>
 
-      <Section title="Voice" hint={`${LANG_LABEL[lang]} voices run on this phone with sherpa-onnx. Download one once, then it works offline.`}>
+      <Section title="Voice" hint={`The phone voice works at once. Other ${LANG_LABEL[lang]} voices run with sherpa-onnx: download one once, then it works offline. If a downloaded voice is silent, the phone voice takes over.`}>
         <View style={{ gap: 8 }}>
           {voicesFor(lang).map((v) => (
             <VoiceRow key={v.id} v={v} lang={lang} chosen={chosen === v.id} onUse={() => update({ voices: { ...st.voices, [lang]: v.id } })} />
@@ -212,11 +215,11 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, marginTop: 4 },
   fieldLabel: { color: colors.sub, fontSize: 13, fontWeight: '600' },
-  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, padding: 12, borderRadius: radius.btn, borderWidth: 1.5, borderColor: colors.line },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, padding: 12, borderRadius: radius.btn, backgroundColor: '#1F1A1A' },
   voiceMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   voiceName: { color: colors.text, fontSize: 15, fontWeight: '600' },
   voiceActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  dl: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.chip, borderWidth: 1.5, borderColor: colors.accent },
+  dl: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.chip, backgroundColor: colors.accentSoft },
   dlText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
-  input: { height: 46, borderRadius: radius.btn, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, color: colors.text, fontSize: 15 },
+  input: { height: 46, borderRadius: radius.btn, backgroundColor: colors.bg, paddingHorizontal: 14, color: colors.text, fontSize: 15 },
 });

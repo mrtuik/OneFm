@@ -14,12 +14,14 @@ export interface Settings {
   /** Chosen system voice id per reading language. Empty means the device default. */
   voices: Partial<Record<Lang, string>>;
   autoPlay: boolean;
+  /** Bumped when the voice engine changes so old voice choices are reset once. */
+  voiceRev: number;
   textSize: TextSize;
   provider: ProviderSettings;
 }
 const DEFAULT: Settings = {
   ageConfirmed: false, guest: false, language: null, gender: null,
-  voices: {}, autoPlay: true, textSize: 'medium', provider: DEFAULT_PROVIDER,
+  voices: {}, voiceRev: 2, autoPlay: true, textSize: 'medium', provider: DEFAULT_PROVIDER,
 };
 const KEY = 'onefm.settings.v1';
 
@@ -35,7 +37,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then((raw) => {
         if (!raw) return;
         const p = JSON.parse(raw);
-        setS({ ...DEFAULT, ...p, voices: { ...(p.voices ?? {}) }, provider: migrateProvider({ ...DEFAULT.provider, ...(p.provider ?? {}) }) });
+        const oldVoices = { ...(p.voices ?? {}) };
+        if ((p.voiceRev ?? 0) < 2) { delete oldVoices.bn; delete oldVoices.hi; }
+        setS({ ...DEFAULT, ...p, voiceRev: 2, voices: oldVoices, provider: migrateProvider({ ...DEFAULT.provider, ...(p.provider ?? {}) }) });
       })
       .catch(() => {})
       .finally(() => setLoaded(true));

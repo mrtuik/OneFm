@@ -460,7 +460,7 @@ export default function Chat() {
 
 const s2 = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', height: 60, paddingHorizontal: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  header: { flexDirection: 'row', alignItems: 'center', height: 60, paddingHorizontal: 8 },
   headLeft: { flexDirection: 'row', width: 64 },
   headRight: { width: 64, alignItems: 'flex-end', paddingRight: 8 },
   menuBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
@@ -470,9 +470,9 @@ const s2 = StyleSheet.create({
   subtitle: { color: colors.sub, fontSize: 12, marginTop: 1 },
 
   ai: { gap: 8 },
-  prepChip: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.card, borderWidth: 1.5, borderColor: colors.line },
+  prepChip: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.card, backgroundColor: colors.surface },
   prepText: { color: colors.sub, fontSize: 13 },
-  userCard: { borderWidth: 1.5, borderColor: colors.line, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 6 },
+  userCard: { backgroundColor: colors.surface, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 6 },
   userLabel: { color: colors.sub, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   userText: { color: colors.text },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },

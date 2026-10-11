@@ -198,7 +198,7 @@ const s = StyleSheet.create({
   tabText: { color: colors.sub, fontSize: 15, fontWeight: '600' },
   underline: { width: 36, height: 3, borderRadius: 2, backgroundColor: 'transparent' },
   epHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  resume: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.chip, borderWidth: 1.5, borderColor: colors.line },
+  resume: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.chip, backgroundColor: colors.surface },
   resumeText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   epCount: { color: colors.sub, fontSize: 13 },
   h: { color: colors.text, fontSize: 18, fontWeight: '800' },

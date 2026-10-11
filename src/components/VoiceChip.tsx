@@ -9,7 +9,7 @@ import { useVoiceStatus } from '../voice/useVoice';
 const BARS = [6, 12, 8, 16, 10, 14, 6, 12, 18, 9, 13, 7, 15, 10, 6, 12, 17, 8, 11, 14, 7, 10, 16, 9];
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-/** Outlined voice message chip: play button, waveform, duration. Outline = the voice settings of the story world. */
+/** Voice message chip: play button, waveform, duration. */
 export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: string; lang: Lang; voiceId?: string }) {
   const voice = resolveVoice(lang, voiceId);
   const status = useVoiceStatus(voice.id);
@@ -68,7 +68,7 @@ export function VoiceChip({ id, text, lang, voiceId }: { id: string; text: strin
 }
 
 const s = StyleSheet.create({
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'flex-start', maxWidth: '100%', paddingVertical: 8, paddingLeft: 8, paddingRight: 14, borderRadius: radius.card, borderWidth: 1.5, borderColor: colors.line },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'flex-start', maxWidth: '100%', paddingVertical: 8, paddingLeft: 8, paddingRight: 14, borderRadius: radius.card, backgroundColor: colors.surface },
   play: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   wave: { flexDirection: 'row', alignItems: 'center', gap: 2.5, height: 20 },
   time: { color: colors.sub, fontSize: 12, fontVariant: ['tabular-nums'] },

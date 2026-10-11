@@ -37,8 +37,8 @@ export function AgeScreen() {
     <Frame>
       <Hero line="Stories you can talk to, and hear back." />
       <View style={{ gap: 16 }}>
-        <Pressable onPress={() => setOk(!ok)} style={[s.check, ok && { borderColor: colors.accent }]}>
-          <View style={[s.box, ok && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+        <Pressable onPress={() => setOk(!ok)} style={[s.check, ok && { backgroundColor: colors.accentSoft }]}>
+          <View style={[s.box, ok && { backgroundColor: colors.accent }]}>
             {ok ? <Ionicons name="checkmark" size={18} color={colors.onAccent} /> : null}
           </View>
           <Text style={s.checkText}>I confirm that I am 18 years old or older.</Text>
@@ -109,10 +109,10 @@ const s = StyleSheet.create({
   hero: { alignItems: 'center', marginTop: 40, marginBottom: 48, gap: 14 },
   brand: { color: colors.text, fontSize: 34, fontWeight: '800' },
   line: { color: colors.sub, fontSize: 15, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
-  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: space.card, borderRadius: radius.card, borderWidth: 1.5, borderColor: colors.line },
-  box: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: space.card, borderRadius: radius.card, backgroundColor: colors.surface },
+  box: { width: 24, height: 24, borderRadius: 6, backgroundColor: '#2E2828', alignItems: 'center', justifyContent: 'center' },
   checkText: { color: colors.text, fontSize: 15, flex: 1, lineHeight: 21 },
-  input: { height: 52, borderRadius: radius.btn, borderWidth: 1.5, borderColor: colors.line, paddingHorizontal: 16, color: colors.text, fontSize: 16 },
+  input: { height: 52, borderRadius: radius.btn, backgroundColor: colors.surface, paddingHorizontal: 16, color: colors.text, fontSize: 16 },
   err: { color: colors.accent, fontSize: 13 },
   label: { color: colors.sub, fontSize: 13, fontWeight: '600' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
