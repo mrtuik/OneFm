@@ -65,3 +65,45 @@ export async function ensureSpeech(lang: Lang, display: string, speech: string, 
     return current || source;
   }
 }
+
+/** Cuts the message into a short first part (so the voice can start early) and a few bigger parts for the rest. */
+export function splitForSpeech(source: string): string[] {
+  const sentences = source.match(/[^.!?\u0964]+[.!?\u0964]*\s*/g)?.map((x) => x.trim()).filter(Boolean) ?? [source];
+  const parts: string[] = [];
+  let cur = '';
+  let limit = 110; // the first part is short: it is converted and spoken first
+  for (const sen of sentences) {
+    if (cur && cur.length + sen.length > limit) { parts.push(cur); cur = ''; limit = 320; }
+    cur = cur ? `${cur} ${sen}` : sen;
+    if (parts.length === 0 && cur.length >= 60) { parts.push(cur); cur = ''; limit = 320; }
+  }
+  if (cur) parts.push(cur);
+  return parts.length ? parts : [source];
+}
+
+async function convertPart(lang: 'hi' | 'bn', seg: string, cfg: ProviderSettings, key: string): Promise<string> {
+  let best = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const out = await chatCompletion({
+      cfg, apiKey: key, model: cfg.model, maxTokens: 400, temperature: attempt === 0 ? 0.1 : 0.3,
+      messages: [
+        { role: 'system', content: `You prepare text for a text-to-speech voice, so spelling decides how it sounds. ${RULES[lang]} Convert EVERY word, in the same order. Never translate, shorten, summarise, skip or add anything. Keep the commas and full stops. Output only the converted text.${attempt ? ' The previous answer still had English letters. Every word must be in the native script.' : ''}` },
+        { role: 'user', content: seg },
+      ],
+    });
+    const fixed = cleanSpeech(out);
+    if (fixed && !best) best = fixed;
+    if (fixed && covers(seg, fixed) && latinShare(fixed) < 0.1) return fixed;
+  }
+  return best && latinShare(best) < 0.3 ? best : '';
+}
+
+/**
+ * One promise per part of the message, all started at once. The first part is short, so it is ready in a second or two
+ * and the voice starts while the rest is still being converted. A part that could not be converted resolves to ''.
+ */
+export function speechParts(lang: Lang, display: string, cfg: ProviderSettings, key: string): Promise<string>[] {
+  const source = cleanSpeech(display);
+  if (lang === 'en') return [Promise.resolve(source)];
+  return splitForSpeech(source).map((seg) => convertPart(lang, seg, cfg, key).catch(() => ''));
+}

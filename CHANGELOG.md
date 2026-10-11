@@ -1,6 +1,7 @@
 # One Fm changelog
 
 ## V6.9.1
+- Voice start in chat: when the voice text must be converted to Bangla/Hindi script, the message is now cut into parts. Part 1 (about 60 to 110 characters) is converted and spoken first, the other parts are converted at the same time and play one after another. Before, the voice waited for the whole message to be converted (one or two big AI calls).
 - Profile preview and replays: a saved (cached) voice file is now read whole and levelled to a clear volume before it plays, and the cache key is bumped (v4) so any quiet or silent file saved by an older build is ignored. Replays also show the numbers line under the voice. Before, a replay showed the stop icon but played almost nothing, with no error.
 - Build summary now prints the SHA-1 and SHA-256 with apksigner (keytool printed "Not a signed jar file" for this APK).
 - Voice no longer waits for a second network call: when the story's own speech_text is already clean Bangla/Hindi script and covers the whole message, it plays at once. The extra rewrite call (15 to 25 s on mobile data) now runs only when speech_text is bad.

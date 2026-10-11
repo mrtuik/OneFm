@@ -221,14 +221,45 @@ if (Native?.addListener) {
     infoFor = { id: activeMsg, text: `model ${loadMs ? sec(loadMs) : 'ready'} · first sound ${sec(firstMs)} · ${audio.toFixed(1)}s audio made in ${sec(gen)} · level ${raw.toFixed(3)} to ${peak.toFixed(2)}` };
     errorListeners.forEach((l) => l());
   });
-  Native.addListener('onDone', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
+  Native.addListener('onDone', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; if (!continueParts()) idle(); } });
   Native.addListener('onStopped', ({ id }: { id: number }) => { if (id === activeJob) { activeJob = -1; idle(); } });
   Native.addListener('onError', ({ id, message }: { id: number; message: string }) => {
-    if (id === activeJob) { activeJob = -1; lastError = message || 'Voice failed.'; if (activeMsg) setVoiceError(activeMsg, lastError); idle(); }
+    if (id === activeJob) { activeJob = -1; pending = null; lastError = message || 'Voice failed.'; if (activeMsg) setVoiceError(activeMsg, lastError); idle(); }
   });
 }
 
+// ---- A long message is spoken in parts: part 1 starts as soon as it is ready, the others follow one by one ----
+let partsRun = 0;
+let pending: { msg: string; lang: Lang; voiceId?: string; rest: Promise<string>[]; run: number } | null = null;
+
+function continueParts(): boolean {
+  const p = pending;
+  if (!p || p.run !== partsRun || p.rest.length === 0) { pending = null; return false; }
+  const next = p.rest.shift()!;
+  next.then((t) => {
+    if (pending !== p || p.run !== partsRun) return;
+    if (!t) { if (!continueParts()) idle(); return; }
+    speak(p.msg, t, p.lang, p.voiceId, true);
+  }).catch(() => { if (pending === p && p.run === partsRun) { pending = null; idle(); } });
+  return true;
+}
+
+/** Speaks a message whose voice text is still being prepared in parts. `fallback` is used if part 1 cannot be prepared. */
+export async function speakParts(id: string, parts: Promise<string>[], lang: Lang, voiceId: string | undefined, fallback: string) {
+  const run = ++partsRun;
+  pending = null;
+  let first = '';
+  try { first = await parts[0]; } catch { first = ''; }
+  if (run !== partsRun) return; // something else started or the user pressed stop
+  if (!first) first = fallback;
+  if (!first) { lastError = 'The voice text could not be prepared. Tap Abar to write the reply again.'; setVoiceError(id, lastError); return; }
+  speak(id, first, lang, voiceId);
+  pending = parts.length > 1 ? { msg: id, lang, voiceId, rest: parts.slice(1), run: partsRun } : null;
+}
+
 export function stopSpeaking() {
+  partsRun++;
+  pending = null;
   token++;
   activeJob = -1;
   try { Native?.stop(); } catch { /* ignore */ }
@@ -243,10 +274,10 @@ function cacheKeyOf(voiceId: string, text: string): string {
 }
 
 /** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */
-export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
+export function speak(id: string, text: string, lang: Lang, voiceId?: string, keepParts = false) {
   const my = ++token;
   const voice = resolveVoice(lang, voiceId);
-  callAt = Date.now(); loadMs = 0; firstMs = 0; infoFor = null;
+  if (!keepParts) { partsRun++; pending = null; callAt = Date.now(); loadMs = 0; firstMs = 0; infoFor = null; }
   lastError = null;
   activeMsg = id;
   setVoiceError(null, null);
@@ -264,7 +295,7 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
       return;
     }
   }
-  emit({ id, loading: true });
+  emit({ id, loading: !keepParts });
 
   const key = cacheKeyOf(voice.id, text);
   (async () => {

@@ -14,11 +14,11 @@ import { useSettings } from '../state/settings';
 import { getApiKey } from '../ai/secure';
 import { deleteChat, loadChat, newChat, saveChat } from '../chat/store';
 import { TurnOptions, takeTurn } from '../chat/engine';
-import { ensureSpeech, speechIsGood } from '../ai/speech';
+import { speechIsGood, speechParts } from '../ai/speech';
 import { YOU, isYou, playableRoles } from '../chat/roles';
 import { cleanSpeech } from '../format';
 import { UiText, uiText } from '../chat/uiText';
-import { isVoiceReady, speak, stopSpeaking, warmVoice } from '../voice/engine';
+import { isVoiceReady, speak, speakParts, stopSpeaking, warmVoice } from '../voice/engine';
 import { incrementPlay } from '../firebase/db';
 
 const FONT = { small: 14, medium: 16, large: 18 } as const;
@@ -173,7 +173,7 @@ export default function Chat() {
     setBusy(true);
     setError(null);
     const startedAt = Date.now();
-    let pendingSpeak: { id: string; text: string } | null = null;
+    let pendingSpeak: { id: string; text?: string; parts?: Promise<string>[]; fallback?: string } | null = null;
     try {
       const key = await getApiKey();
       const final = await takeTurn(story, chatRef.current, opts, s.provider, key, setBoth);
@@ -185,16 +185,17 @@ export default function Chat() {
         if (speechIsGood(story.language, m.text, m.speech!)) {
           pendingSpeak = { id: m.id, text: cleanSpeech(m.speech!) };
         } else {
+          // Bad voice text: convert the message in parts. Part 1 is short, so the voice starts after about a second.
+          const parts = speechParts(story.language, m.text, s.provider, key);
           setPrepId(m.id);
-          ensureSpeech(story.language, m.text, m.speech!, s.provider, key)
-            .then(async (better) => {
-              const c = chatRef.current;
-              if (c) { const n = { ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, speech: better } : x)) }; setBoth(n); saveChat(n); }
-              const stillLast = chatRef.current?.messages[chatRef.current.messages.length - 1]?.id === m.id;
-              if (s.autoPlay && stillLast && !busyRef.current && (await isVoiceReady(story.language, voiceId))) speak(m.id, cleanSpeech(better), story.language, voiceId);
-            })
-            .catch(() => {})
-            .finally(() => setPrepId((p) => (p === m.id ? null : p)));
+          parts[0].finally(() => setPrepId((p) => (p === m.id ? null : p)));
+          Promise.all(parts).then((texts) => {
+            if (texts.some((t) => !t)) return;
+            const better = texts.join(' ');
+            const c = chatRef.current;
+            if (c) { const n = { ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, speech: better } : x)) }; setBoth(n); saveChat(n); }
+          }).catch(() => {});
+          pendingSpeak = { id: m.id, parts, fallback: speechIsGood(story.language, m.text, m.speech!) ? cleanSpeech(m.speech!) : '' };
         }
       }
     } catch (e: any) {
@@ -203,10 +204,13 @@ export default function Chat() {
       busyRef.current = false;
       setBusy(false);
     }
-    const ps = pendingSpeak as { id: string; text: string } | null;
+    const ps = pendingSpeak as { id: string; text?: string; parts?: Promise<string>[]; fallback?: string } | null;
     if (ps && s.autoPlay && (await isVoiceReady(story.language, voiceId))) {
       const stillLast = chatRef.current?.messages[chatRef.current.messages.length - 1]?.id === ps.id;
-      if (stillLast && !busyRef.current) speak(ps.id, ps.text, story.language, voiceId);
+      if (stillLast && !busyRef.current) {
+        if (ps.parts) speakParts(ps.id, ps.parts, story.language, voiceId, ps.fallback ?? '');
+        else if (ps.text) speak(ps.id, ps.text, story.language, voiceId);
+      }
     }
   }, [story, s.provider, s.autoPlay, voiceId]);
 
