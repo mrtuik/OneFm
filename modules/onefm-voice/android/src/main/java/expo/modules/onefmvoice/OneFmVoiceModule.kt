@@ -166,20 +166,23 @@ class OneFmVoiceModule : Module() {
     return Leveled(raw, peak, Math.sqrt(sq / maxOf(a.size, 1)), dc, bad)
   }
 
+  // IMPORTANT: a stream AudioTrack does not start playing until its buffer has been filled once (or stop() is called).
+  // The old 20 s buffer was never filled by a 4 to 7 s message, so nothing was heard and the track was released at the end.
+  // Now: 16-bit PCM (works on every phone) and a buffer of about 1 s. The player also calls stop() after the last write,
+  // which makes Android play out whatever is still in the buffer.
   private fun buildTrack(sampleRate: Int): AudioTrack {
-    val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
-    // 20 s of buffer so generation can run ahead of playback
-    val bufSize = maxOf(minBuf, sampleRate * 4 * 20)
+    val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+    val bufSize = maxOf(minBuf, sampleRate * 2) // 2 bytes per sample, 1 s
     val built = AudioTrack.Builder()
       .setAudioAttributes(
         AudioAttributes.Builder()
           .setUsage(AudioAttributes.USAGE_MEDIA)
-          .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+          .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
           .build()
       )
       .setAudioFormat(
         AudioFormat.Builder()
-          .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+          .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
           .setSampleRate(sampleRate)
           .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
           .build()
@@ -187,6 +190,10 @@ class OneFmVoiceModule : Module() {
       .setBufferSizeInBytes(bufSize)
       .setTransferMode(AudioTrack.MODE_STREAM)
       .build()
+    if (built.state != AudioTrack.STATE_INITIALIZED) {
+      try { built.release() } catch (e: Exception) { }
+      throw IllegalStateException("Android could not open the audio output (sample rate $sampleRate Hz).")
+    }
     return built
   }
 
@@ -376,13 +383,28 @@ class OneFmVoiceModule : Module() {
             try { t.setVolume(1.0f) } catch (e: Exception) { }
             t.play()
             var pos = 0
+            val chunk = ShortArray(4096)
             while (!cancelled && activeId == id && pos < out.size) {
-              val n = minOf(8192, out.size - pos)
-              t.write(out, pos, n, AudioTrack.WRITE_BLOCKING)
+              val n = minOf(chunk.size, out.size - pos)
+              for (i in 0 until n) {
+                val v = out[pos + i]
+                val c = if (v > 1f) 1f else if (v < -1f) -1f else v
+                chunk[i] = (c * 32767f).toInt().toShort()
+              }
+              var off = 0
+              while (off < n && !cancelled && activeId == id) {
+                val w = t.write(chunk, off, n - off, AudioTrack.WRITE_BLOCKING)
+                if (w < 0) throw RuntimeException("Android refused the audio (write error $w).")
+                if (w == 0) { Thread.sleep(5); continue }
+                off += w
+              }
               pos += n
               totalFrames += n
             }
+            // Everything is written. stop() on a stream track means "play what is left, then stop":
+            // it also starts a track that never filled its buffer (short messages).
             if (!cancelled && activeId == id) {
+              try { t.stop() } catch (e: Exception) { }
               sendEvent("onInfo", mapOf(
                 "id" to id,
                 "gen" to genMs.toInt(),
@@ -395,24 +417,28 @@ class OneFmVoiceModule : Module() {
             }
           }
 
-          // Wait until everything written has been played. Give up if the position stops moving for 4 s.
+          // Wait until everything written has been played. If the position never moves, say so (no silent failure).
+          var lastHead = 0
+          var neverMoved = false
           val t = track
           if (t != null && started && !cancelled && activeId == id) {
-            var lastHead = -1
             var lastMove = System.currentTimeMillis()
+            lastHead = -1
             while (!cancelled && activeId == id) {
               val head = t.playbackHeadPosition
-              if (head >= totalFrames) break
+              if (head >= totalFrames) { lastHead = head; break }
               val now = System.currentTimeMillis()
               if (head != lastHead) { lastHead = head; lastMove = now }
-              else if (now - lastMove > 4000) break
+              else if (now - lastMove > 4000) { neverMoved = lastHead <= 0; break }
               Thread.sleep(15)
             }
+            if (!cancelled && activeId == id && !neverMoved) Thread.sleep(150) // let the last samples leave the speaker
           }
 
           if (!cancelled && activeId == id) {
             val silent = started && totalFrames > 0 && peak < 0.01f
             if (!started) sendEvent("onError", mapOf("id" to id, "message" to "The voice produced no audio. The text may contain letters this voice cannot read."))
+            else if (neverMoved) sendEvent("onError", mapOf("id" to id, "message" to "Android did not start the audio output (position stayed at 0). Check media volume and Bluetooth, then try again."))
             else if (silent && mediaVolume == 0) sendEvent("onError", mapOf("id" to id, "message" to "Media volume is 0. Turn the phone's media volume up."))
             else if (silent) sendEvent("onError", mapOf("id" to id, "message" to String.format("The voice made no sound (loudest sample %.4f, %d bad samples, %d Hz). Try another voice in Profile.", peak, bad, sr)))
             else sendEvent("onDone", mapOf("id" to id))

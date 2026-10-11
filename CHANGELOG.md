@@ -1,5 +1,10 @@
 # One Fm changelog
 
+## V6.9.8
+- Voice silence fixed at the root (Profile preview and chat both). The native player used a 20 second AudioTrack buffer. Android does not start a stream track until its buffer has been filled once, and a 4 to 7 second message never fills 20 seconds, so nothing was heard, the screen still showed the stop icon / played state, and the track was released at the end with no error. Now the buffer is about 1 second, audio is 16-bit PCM (works on every phone), and stop() is called after the last write so Android plays out whatever is left.
+- The player no longer fails silently: a refused write or an output that never started now shows the real reason under the voice (before, it just said done).
+- Replays from memory use the same fixed player.
+
 ## V6.9.1
 - Voice now works like SHEETMD's player: the whole message is generated first (sentence by sentence), levelled once, then played from the start in one go with play() called before the first write. Nothing starts halfway, so a message is never heard in pieces.
 - No voice file is saved to disk any more. Replays come from memory (last 8 messages). Before, a saved file could replay silence with no error.
