@@ -23,6 +23,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.Collections
+import java.util.LinkedHashMap
 import java.util.concurrent.Executors
 
 /**
@@ -122,30 +124,46 @@ class OneFmVoiceModule : Module() {
     abandonAudioFocus()
   }
 
-  // ---- Audio cache: every message is generated once, then replays start at 0.0 s from a file ----
-  // File format: 4 bytes sample rate (little endian), then 16-bit little endian mono samples.
-  private fun cacheDir(): File? {
-    val ctx = appContext.reactContext?.applicationContext ?: return null
-    val dir = File(ctx.cacheDir, "onefm-voice-cache")
-    if (!dir.exists()) dir.mkdirs()
-    return dir
-  }
-
-  private fun cacheFile(key: String): File? {
-    if (key.isEmpty()) return null
-    val dir = cacheDir() ?: return null
-    return File(dir, key.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".pcm")
-  }
-
-  private fun pruneCache() {
-    val dir = cacheDir() ?: return
-    val files = dir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() } ?: return
-    var total = files.sumOf { it.length() }
-    for (f in files) {
-      if (total <= 100L * 1024 * 1024) break
-      total -= f.length()
-      f.delete()
+  // ---- Replays: a message that was spoken once is kept in memory (already levelled), so it starts at 0.0 s again ----
+  // Nothing is saved to disk: a bad saved file can never replay silence.
+  private val memCache = Collections.synchronizedMap(
+    object : LinkedHashMap<String, Pair<FloatArray, Int>>(8, 0.75f, true) {
+      override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<FloatArray, Int>>?): Boolean = size > 8
     }
+  )
+
+  private class Leveled(val rawPeak: Float, val peak: Float, val rms: Double, val dc: Float, val bad: Int)
+
+  // Cleans and levels one finished message in place: NaN removed, constant offset (DC) removed, quiet voices lifted so that
+  // the loud end sits near 0.5, and anything above 0.8 is rounded off softly instead of being cut flat.
+  private fun levelAudio(a: FloatArray): Leveled {
+    var bad = 0
+    var sum = 0.0
+    for (i in a.indices) {
+      val v = a[i]
+      if (v.isNaN() || v.isInfinite()) { a[i] = 0f; bad++ } else sum += v
+    }
+    val dc = (sum / maxOf(a.size, 1)).toFloat()
+    var raw = 0f
+    for (v in a) { val av = if (v < 0f) -v else v; if (av > raw) raw = av }
+    if (kotlin.math.abs(dc) > 0.0003f) for (i in a.indices) a[i] = a[i] - dc
+    val mags = FloatArray(a.size)
+    for (i in a.indices) mags[i] = if (a[i] < 0f) -a[i] else a[i]
+    java.util.Arrays.sort(mags)
+    val level = if (mags.isEmpty()) 0f else mags[(mags.size * 0.999).toInt().coerceAtMost(mags.size - 1)]
+    val g = if (level >= 0.002f && level < 0.5f) (0.5f / level).coerceAtMost(40f) else 1f
+    var peak = 0f
+    var sq = 0.0
+    for (i in a.indices) {
+      val y = a[i] * g
+      val ay = if (y < 0f) -y else y
+      val o = if (ay <= 0.8f) y else (if (y < 0f) -1f else 1f) * (0.8f + 0.2f * Math.tanh(((ay - 0.8f) / 0.2f).toDouble()).toFloat())
+      a[i] = o
+      val ao = if (o < 0f) -o else o
+      if (ao > peak) peak = ao
+      sq += (o * o).toDouble()
+    }
+    return Leveled(raw, peak, Math.sqrt(sq / maxOf(a.size, 1)), dc, bad)
   }
 
   private fun buildTrack(sampleRate: Int): AudioTrack {
@@ -264,18 +282,15 @@ class OneFmVoiceModule : Module() {
 
     Function("stop") { stopPlayback() }
 
-    Function("hasCache") { key: String ->
-      val f = cacheFile(key)
-      f != null && f.exists() && f.length() > 8
-    }
+    Function("hasCache") { key: String -> key.isNotEmpty() && memCache.containsKey(key) }
 
-    // Plays one text. A cached message starts at once from its file. Otherwise it is generated sentence by
-    // sentence, played while it is generated, and saved so the next play is instant.
+    // Speaks one text. The whole text is generated first (sentence by sentence), levelled once, then played from the start
+    // in one go. A text that was spoken before starts at once from memory.
     Function("speak") { id: Int, text: String, speed: Float, sid: Int, cacheKey: String ->
-      val cache = cacheFile(cacheKey)
-      val cached = cache != null && cache.exists() && cache.length() > 8
+      val memKey = if (cacheKey.isEmpty()) "" else "$cacheKey:$sid:$speed"
+      val memHit = if (memKey.isNotEmpty()) memCache[memKey] else null
       val currentTts = tts
-      if (currentTts == null && !cached) {
+      if (currentTts == null && memHit == null) {
         sendEvent("onError", mapOf("id" to id, "message" to "Voice model is not loaded"))
         return@Function
       }
@@ -294,186 +309,89 @@ class OneFmVoiceModule : Module() {
         cancelled = false
         var track: AudioTrack? = null
         var started = false
-        var out: BufferedOutputStream? = null
-        var tmp: File? = null
-        var saved = false
+        var totalFrames = 0
+        var peak = 0f
         try {
           requestAudioFocus()
-          var totalFrames = 0
-          // Loudest sample and bad samples of this message. All-quiet audio means the voice made no sound.
-          var peak = 0f
-          var rawPeak = 0f
-          // Average level (rms) of what is played and the largest constant offset removed: shown on screen to tell quiet audio from a DC offset.
-          var sumSq = 0.0
-          var dcMax = 0f
-          var badSamples = 0
-          var sampleRateUsed = 0
           val mediaVolume = try {
             (appContext.reactContext?.applicationContext?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 1
           } catch (e: Exception) { 1 }
 
-          fun begin() {
-            val t = track
-            if (t != null && !started) {
-              started = true
-              sendEvent("onStart", mapOf("id" to id))
-              try { t.setVolume(1.0f) } catch (e: Exception) { }
-              t.play()
-            }
-          }
+          var audio: FloatArray? = memHit?.first
+          var sr: Int = memHit?.second ?: 0
+          var rawPeak = 0f
+          var rms = 0.0
+          var dc = 0f
+          var bad = 0
+          var genMs = 0L
 
-          if (cached && cache != null) {
-            // ---- Replay from the saved file: no generation, starts at 0.0 s ----
-            // The whole file is read and levelled again, so audio that an older build saved too quietly is still audible.
-            val all = cache.readBytes()
-            if (all.size < 8) throw IllegalStateException("Saved voice file is damaged")
-            val sr = ByteBuffer.wrap(all, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt()
-            sampleRateUsed = sr
-            val count = (all.size - 4) / 2
-            val bb = ByteBuffer.wrap(all, 4, count * 2).order(ByteOrder.LITTLE_ENDIAN)
-            val floats = FloatArray(count)
-            var filePeak = 0f
-            for (i in 0 until count) {
-              val fv = bb.getShort() / 32768f
-              floats[i] = fv
-              val av = if (fv < 0f) -fv else fv
-              if (av > filePeak) filePeak = av
-            }
-            rawPeak = filePeak
-            val g = if (filePeak >= 0.002f && filePeak < 0.5f) (0.8f / filePeak).coerceAtMost(40f) else 1f
-            if (g != 1f) for (i in 0 until count) floats[i] = (floats[i] * g).coerceIn(-1f, 1f)
-            peak = (filePeak * g).coerceAtMost(1f)
-            val t = buildTrack(sr)
-            track = t
-            currentAudioTrack = t
-            var pos = 0
-            while (!cancelled && activeId == id && pos < count) {
-              val n = minOf(8192, count - pos)
-              t.write(floats, pos, n, AudioTrack.WRITE_BLOCKING)
-              pos += n
-              totalFrames += n
-              if (!started) begin()
-            }
-            if (!cancelled && activeId == id && totalFrames > 0) {
-              sendEvent("onInfo", mapOf(
-                "id" to id, "gen" to 0, "audio" to (totalFrames.toDouble() / sr), "raw" to rawPeak.toDouble(), "peak" to peak.toDouble()
-              ))
-            }
-          } else if (currentTts != null) {
-            // ---- First play: generate sentence by sentence, play while generating, save for next time ----
-            val sr = currentTts.sampleRate()
-            sampleRateUsed = sr
-            val t = buildTrack(sr)
-            track = t
-            currentAudioTrack = t
-
-            if (cache != null) {
-              try {
-                val tf = File(cache.parentFile, cache.name + ".tmp")
-                tmp = tf
-                val os = BufferedOutputStream(FileOutputStream(tf))
-                os.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(sr).array())
-                out = os
-              } catch (e: Exception) { out = null }
-            }
-
-            val chunks = splitText(text)
-            val totalChars = maxOf(1, chunks.sumOf { it.length })
-            var doneChars = 0
+          if (audio == null && currentTts != null) {
+            // ---- Generate the whole text first ----
+            sr = currentTts.sampleRate()
             val t0 = System.currentTimeMillis()
-            var finishedAll = true
-
+            val chunks = splitText(text)
+            val parts = ArrayList<FloatArray>()
+            val gap = FloatArray(sr * 12 / 100) // 120 ms of silence between sentences
             synchronized(genLock) {
-              for (chunk in chunks) {
-                if (cancelled || activeId != id) { finishedAll = false; break }
-                // Collect the sentence first, then lift it to a clear level. Some voices (Bangla models) come out
-                // at 1 to 5 percent of full scale: not "silent", but far too quiet to hear even at full volume.
-                val parts = ArrayList<FloatArray>()
-                var chunkPeak = 0f
+              for ((ci, chunk) in chunks.withIndex()) {
+                if (cancelled || activeId != id) break
+                if (ci > 0) parts.add(gap)
                 currentTts.generateWithCallback(chunk, sid = sid, speed = speed, callback = { samples ->
                   if (cancelled || activeId != id) {
                     0
                   } else {
-                    if (samples.isNotEmpty()) {
-                      val c = samples.copyOf()
-                      for (i in c.indices) {
-                        val v = c[i]
-                        if (v.isNaN() || v.isInfinite()) { c[i] = 0f; badSamples++ }
-                        else { val av = if (v < 0f) -v else v; if (av > chunkPeak) chunkPeak = av }
-                      }
-                      parts.add(c)
-                    }
+                    if (samples.isNotEmpty()) parts.add(samples.copyOf())
                     1
                   }
                 })
-                if (chunkPeak > rawPeak) rawPeak = chunkPeak
-                if (!cancelled && activeId == id && parts.isNotEmpty()) {
-                  // Level from the 99.9th percentile, not the single loudest sample, so one click cannot keep the voice quiet.
-                  var total = 0
-                  for (c in parts) total += c.size
-                  // Remove a constant offset (DC). A voice riding on an offset gets lifted into a flat line at full scale,
-                  // which is silent to the ear while the peak meter reads 1.00.
-                  var dcSum = 0.0
-                  for (c in parts) for (v in c) dcSum += v
-                  val dc = (dcSum / maxOf(total, 1)).toFloat()
-                  if (kotlin.math.abs(dc) > 0.0003f) for (c in parts) for (i in c.indices) c[i] = c[i] - dc
-                  if (kotlin.math.abs(dc) > dcMax) dcMax = kotlin.math.abs(dc)
-                  val mags = FloatArray(total)
-                  var mi = 0
-                  for (c in parts) for (v in c) { mags[mi++] = if (v < 0f) -v else v }
-                  java.util.Arrays.sort(mags)
-                  val level = mags[(total * 0.999).toInt().coerceAtMost(total - 1)]
-                  // Never lift past full scale: a gain that clips the loudest samples makes clicks and distortion.
-                  val loudest = mags[total - 1]
-                  val g = if (level >= 0.002f && level < 0.8f) minOf(0.8f / level, 0.97f / maxOf(loudest, 0.0001f)).coerceIn(1f, 40f) else 1f
-                  for (c in parts) {
-                    if (g != 1f) for (i in c.indices) c[i] = (c[i] * g).coerceIn(-1f, 1f)
-                    for (v in c) { val av = if (v < 0f) -v else v; if (av > peak) peak = av; sumSq += (v * v).toDouble() }
-                    t.write(c, 0, c.size, AudioTrack.WRITE_BLOCKING)
-                    totalFrames += c.size
-                    // Play as soon as the first samples are in the buffer. If begin() waited for the whole loop,
-                    // a piece longer than the buffer would block write() forever (nothing plays, so nothing drains).
-                    if (!started) begin()
-                    val o = out
-                    if (o != null) {
-                      try {
-                        val bb = ByteBuffer.allocate(c.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-                        for (v in c) bb.putShort((v.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
-                        o.write(bb.array())
-                      } catch (e: Exception) { }
-                    }
-                  }
-                }
-                doneChars += chunk.length
-
-                // Start at once with the first piece. The old rule waited until almost everything was generated,
-                // which on a slow voice meant 20 seconds of silence. A short pause between pieces is better than that.
-                if (!started && totalFrames > 0) begin()
               }
             }
-            if (cancelled || activeId != id) finishedAll = false
-            // Numbers for the screen: how long generating took, how much audio came out, and its level before and after the lift.
-            if (!cancelled && activeId == id && totalFrames > 0) {
+            genMs = System.currentTimeMillis() - t0
+            if (!cancelled && activeId == id) {
+              var total = 0
+              for (c in parts) total += c.size
+              if (total > 0) {
+                val all = FloatArray(total)
+                var o = 0
+                for (c in parts) { System.arraycopy(c, 0, all, o, c.size); o += c.size }
+                val lv = levelAudio(all)
+                rawPeak = lv.rawPeak; peak = lv.peak; rms = lv.rms; dc = lv.dc; bad = lv.bad
+                audio = all
+                if (memKey.isNotEmpty() && lv.peak >= 0.01f) memCache[memKey] = Pair(all, sr)
+              }
+            }
+          } else if (audio != null) {
+            for (v in audio) { val av = if (v < 0f) -v else v; if (av > peak) peak = av }
+            rawPeak = peak
+          }
+
+          // ---- Play it from the start ----
+          val out = audio
+          if (!cancelled && activeId == id && out != null && out.isNotEmpty() && sr > 0) {
+            val t = buildTrack(sr)
+            track = t
+            currentAudioTrack = t
+            started = true
+            sendEvent("onStart", mapOf("id" to id))
+            try { t.setVolume(1.0f) } catch (e: Exception) { }
+            t.play()
+            var pos = 0
+            while (!cancelled && activeId == id && pos < out.size) {
+              val n = minOf(8192, out.size - pos)
+              t.write(out, pos, n, AudioTrack.WRITE_BLOCKING)
+              pos += n
+              totalFrames += n
+            }
+            if (!cancelled && activeId == id) {
               sendEvent("onInfo", mapOf(
                 "id" to id,
-                "gen" to (System.currentTimeMillis() - t0).toInt(),
+                "gen" to genMs.toInt(),
                 "audio" to (totalFrames.toDouble() / sr),
                 "raw" to rawPeak.toDouble(),
                 "peak" to peak.toDouble(),
-                "rms" to Math.sqrt(sumSq / maxOf(totalFrames, 1)),
-                "dc" to dcMax.toDouble()
+                "rms" to rms,
+                "dc" to dc.toDouble()
               ))
-            }
-
-            // Short texts never reach the start rule: start them now.
-            if (!started && totalFrames > 0 && !cancelled && activeId == id) begin()
-
-            try { out?.flush(); out?.close() } catch (e: Exception) { }
-            out = null
-            if (finishedAll && cache != null && tmp != null && totalFrames > 0 && peak >= 0.01f) {
-              if (cache.exists()) cache.delete()
-              saved = tmp?.renameTo(cache) ?: false
-              if (saved) pruneCache()
             }
           }
 
@@ -494,10 +412,9 @@ class OneFmVoiceModule : Module() {
 
           if (!cancelled && activeId == id) {
             val silent = started && totalFrames > 0 && peak < 0.01f
-            if (silent && cached && cache != null) { try { cache.delete() } catch (e: Exception) { } }
             if (!started) sendEvent("onError", mapOf("id" to id, "message" to "The voice produced no audio. The text may contain letters this voice cannot read."))
             else if (silent && mediaVolume == 0) sendEvent("onError", mapOf("id" to id, "message" to "Media volume is 0. Turn the phone's media volume up."))
-            else if (silent) sendEvent("onError", mapOf("id" to id, "message" to String.format("The voice made no sound (loudest sample %.4f, %d bad samples, %d Hz). Try another voice in Profile.", peak, badSamples, sampleRateUsed)))
+            else if (silent) sendEvent("onError", mapOf("id" to id, "message" to String.format("The voice made no sound (loudest sample %.4f, %d bad samples, %d Hz). Try another voice in Profile.", peak, bad, sr)))
             else sendEvent("onDone", mapOf("id" to id))
           }
         } catch (e: Throwable) {
@@ -505,8 +422,6 @@ class OneFmVoiceModule : Module() {
             sendEvent("onError", mapOf("id" to id, "message" to (e.message ?: "Playback failed")))
           }
         } finally {
-          try { out?.close() } catch (e: Exception) { }
-          if (!saved) { try { tmp?.delete() } catch (e: Exception) { } }
           try { track?.stop(); track?.release() } catch (e: Exception) { }
           if (currentAudioTrack === track) currentAudioTrack = null
           abandonAudioFocus()

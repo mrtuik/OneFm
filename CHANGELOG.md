@@ -1,6 +1,10 @@
 # One Fm changelog
 
 ## V6.9.1
+- Voice now works like SHEETMD's player: the whole message is generated first (sentence by sentence), levelled once, then played from the start in one go with play() called before the first write. Nothing starts halfway, so a message is never heard in pieces.
+- No voice file is saved to disk any more. Replays come from memory (last 8 messages). Before, a saved file could replay silence with no error.
+- Quiet voices are lifted once over the whole message, a constant offset is removed, and loud peaks are rounded off softly instead of being cut flat.
+- Chat: the voice text is converted in parts at the same time (Google Input Tools first, AI as backup), then the joined text is spoken once.
 - Voice: a constant offset (DC) is removed from every generated sentence before the volume lift. The numbers line now also shows rms (average loudness) and dc (offset removed): peak 1.00 with a tiny rms means the sound is a flat line, not speech.
 - Profile preview is no longer saved or replayed from a file. It is always generated live, the same path that plays in chat, so the numbers line shows real generation time.
 - The volume lift never pushes the loudest sample past full scale any more (before, a 40x lift could clip it into clicks).
