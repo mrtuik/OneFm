@@ -17,9 +17,12 @@ import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.Executors
 
 /**
@@ -119,6 +122,95 @@ class OneFmVoiceModule : Module() {
     abandonAudioFocus()
   }
 
+  // ---- Audio cache: every message is generated once, then replays start at 0.0 s from a file ----
+  // File format: 4 bytes sample rate (little endian), then 16-bit little endian mono samples.
+  private fun cacheDir(): File? {
+    val ctx = appContext.reactContext?.applicationContext ?: return null
+    val dir = File(ctx.cacheDir, "onefm-voice-cache")
+    if (!dir.exists()) dir.mkdirs()
+    return dir
+  }
+
+  private fun cacheFile(key: String): File? {
+    if (key.isEmpty()) return null
+    val dir = cacheDir() ?: return null
+    return File(dir, key.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".pcm")
+  }
+
+  private fun pruneCache() {
+    val dir = cacheDir() ?: return
+    val files = dir.listFiles()?.filter { it.isFile }?.sortedBy { it.lastModified() } ?: return
+    var total = files.sumOf { it.length() }
+    for (f in files) {
+      if (total <= 100L * 1024 * 1024) break
+      total -= f.length()
+      f.delete()
+    }
+  }
+
+  private fun buildTrack(sampleRate: Int): AudioTrack {
+    val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
+    // 20 s of buffer so generation can run ahead of playback
+    val bufSize = maxOf(minBuf, sampleRate * 4 * 20)
+    return AudioTrack.Builder()
+      .setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+          .build()
+      )
+      .setAudioFormat(
+        AudioFormat.Builder()
+          .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+          .setSampleRate(sampleRate)
+          .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+          .build()
+      )
+      .setBufferSizeInBytes(bufSize)
+      .setTransferMode(AudioTrack.MODE_STREAM)
+      .build()
+  }
+
+  // Some models hand over the whole text as one block, so the voice would stay silent until everything is
+  // generated. Cutting the text into short sentences here makes the first audio ready after the first one.
+  private fun splitText(text: String): List<String> {
+    val sentences = text.trim().split(Regex("(?<=[.])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
+    val pieces = ArrayList<String>()
+    for (sentence in sentences) {
+      if (sentence.length <= 130) { pieces.add(sentence); continue }
+      var cur = StringBuilder()
+      for (part in sentence.split(Regex("(?<=,)\\s+"))) {
+        if (cur.isNotEmpty() && cur.length + part.length > 110) {
+          pieces.add(cur.toString().trim())
+          cur = StringBuilder()
+        }
+        if (cur.isNotEmpty()) cur.append(' ')
+        cur.append(part)
+      }
+      if (cur.isNotEmpty()) pieces.add(cur.toString().trim())
+    }
+    val out = ArrayList<String>()
+    var carry = ""
+    for (piece in pieces) {
+      val joined = if (carry.isEmpty()) piece else "$carry $piece"
+      if (joined.length < 20) { carry = joined } else { out.add(joined); carry = "" }
+    }
+    if (carry.isNotEmpty()) {
+      if (out.isNotEmpty()) out[out.size - 1] = out[out.size - 1] + " " + carry else out.add(carry)
+    }
+    return if (out.isEmpty()) listOf(text) else out
+  }
+
+  private fun readFully(input: BufferedInputStream, buf: ByteArray): Int {
+    var got = 0
+    while (got < buf.size) {
+      val r = input.read(buf, got, buf.size - got)
+      if (r < 0) break
+      got += r
+    }
+    return got
+  }
+
   override fun definition() = ModuleDefinition {
     Name("OneFmVoice")
     Events("onStart", "onDone", "onStopped", "onError")
@@ -164,10 +256,18 @@ class OneFmVoiceModule : Module() {
 
     Function("stop") { stopPlayback() }
 
-    // Generates and plays one text. Audio starts as soon as the first sentence is ready.
-    Function("speak") { id: Int, text: String, speed: Float, sid: Int ->
+    Function("hasCache") { key: String ->
+      val f = cacheFile(key)
+      f != null && f.exists() && f.length() > 8
+    }
+
+    // Plays one text. A cached message starts at once from its file. Otherwise it is generated sentence by
+    // sentence, played while it is generated, and saved so the next play is instant.
+    Function("speak") { id: Int, text: String, speed: Float, sid: Int, cacheKey: String ->
+      val cache = cacheFile(cacheKey)
+      val cached = cache != null && cache.exists() && cache.length() > 8
       val currentTts = tts
-      if (currentTts == null) {
+      if (currentTts == null && !cached) {
         sendEvent("onError", mapOf("id" to id, "message" to "Voice model is not loaded"))
         return@Function
       }
@@ -184,68 +284,130 @@ class OneFmVoiceModule : Module() {
       playExecutor.submit {
         activeId = id
         cancelled = false
-        var audioTrack: AudioTrack? = null
+        var track: AudioTrack? = null
         var started = false
+        var out: BufferedOutputStream? = null
+        var tmp: File? = null
+        var saved = false
         try {
           requestAudioFocus()
-          val sampleRate = currentTts.sampleRate()
-          val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
-          // 20 s of buffer, and playback starts only after 1.5 s is ready, so slow generation cannot leave gaps.
-          val bufSize = maxOf(minBuf, sampleRate * 4 * 20)
-          val primeFrames = (sampleRate * 1.5).toInt()
-          audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(
-              AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-            )
-            .setAudioFormat(
-              AudioFormat.Builder()
-                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                .setSampleRate(sampleRate)
-                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                .build()
-            )
-            .setBufferSizeInBytes(bufSize)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
-          val track = audioTrack!!
-          currentAudioTrack = track
+          var totalFrames = 0
+
           fun begin() {
-            if (!started) {
+            val t = track
+            if (t != null && !started) {
               started = true
               sendEvent("onStart", mapOf("id" to id))
-              track.play()
+              t.play()
             }
           }
 
-          var totalWrittenFrames = 0
-          synchronized(genLock) {
-            currentTts.generateWithCallback(text, sid = sid, speed = speed, callback = { samples ->
-              if (cancelled || activeId != id) {
-                0
-              } else {
-                if (samples.isNotEmpty()) {
-                  track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
-                  totalWrittenFrames += samples.size
-                  if (!started && totalWrittenFrames >= primeFrames) begin()
-                }
-                1
+          if (cached && cache != null) {
+            // ---- Replay from the saved file: no generation, starts at 0.0 s ----
+            val input = BufferedInputStream(FileInputStream(cache))
+            try {
+              val hdr = ByteArray(4)
+              readFully(input, hdr)
+              val sr = ByteBuffer.wrap(hdr).order(ByteOrder.LITTLE_ENDIAN).getInt()
+              val t = buildTrack(sr)
+              track = t
+              currentAudioTrack = t
+              val bytes = ByteArray(16384)
+              val floats = FloatArray(8192)
+              while (!cancelled && activeId == id) {
+                val n = readFully(input, bytes)
+                val count = n / 2
+                if (count <= 0) break
+                val bb = ByteBuffer.wrap(bytes, 0, count * 2).order(ByteOrder.LITTLE_ENDIAN)
+                for (i in 0 until count) floats[i] = bb.getShort() / 32768f
+                t.write(floats, 0, count, AudioTrack.WRITE_BLOCKING)
+                totalFrames += count
+                if (!started) begin()
+                if (n < bytes.size) break
               }
-            })
+            } finally {
+              try { input.close() } catch (e: Exception) { }
+            }
+          } else if (currentTts != null) {
+            // ---- First play: generate sentence by sentence, play while generating, save for next time ----
+            val sr = currentTts.sampleRate()
+            val t = buildTrack(sr)
+            track = t
+            currentAudioTrack = t
+
+            if (cache != null) {
+              try {
+                val tf = File(cache.parentFile, cache.name + ".tmp")
+                tmp = tf
+                val os = BufferedOutputStream(FileOutputStream(tf))
+                os.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(sr).array())
+                out = os
+              } catch (e: Exception) { out = null }
+            }
+
+            val chunks = splitText(text)
+            val totalChars = maxOf(1, chunks.sumOf { it.length })
+            var doneChars = 0
+            val t0 = System.currentTimeMillis()
+            var finishedAll = true
+
+            synchronized(genLock) {
+              for (chunk in chunks) {
+                if (cancelled || activeId != id) { finishedAll = false; break }
+                currentTts.generateWithCallback(chunk, sid = sid, speed = speed, callback = { samples ->
+                  if (cancelled || activeId != id) {
+                    0
+                  } else {
+                    if (samples.isNotEmpty()) {
+                      t.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
+                      totalFrames += samples.size
+                      val o = out
+                      if (o != null) {
+                        try {
+                          val bb = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                          for (v in samples) bb.putShort((v.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
+                          o.write(bb.array())
+                        } catch (e: Exception) { }
+                      }
+                    }
+                    1
+                  }
+                })
+                doneChars += chunk.length
+
+                // Start playing as soon as the audio already generated will last until the rest is ready.
+                if (!started && totalFrames > 0) {
+                  val buffered = totalFrames.toDouble() / sr
+                  val elapsed = (System.currentTimeMillis() - t0) / 1000.0
+                  val rtf = elapsed / buffered
+                  val estTotal = buffered * totalChars / maxOf(1, doneChars)
+                  val remaining = maxOf(0.0, estTotal - buffered)
+                  if (buffered >= 1.0 && (buffered >= remaining * rtf || (elapsed >= 6.0 && buffered >= 2.0) || buffered >= 15.0)) begin()
+                }
+              }
+            }
+            if (cancelled || activeId != id) finishedAll = false
+
+            // Short texts never reach the start rule: start them now.
+            if (!started && totalFrames > 0 && !cancelled && activeId == id) begin()
+
+            try { out?.flush(); out?.close() } catch (e: Exception) { }
+            out = null
+            if (finishedAll && cache != null && tmp != null && totalFrames > 0) {
+              if (cache.exists()) cache.delete()
+              saved = tmp?.renameTo(cache) ?: false
+              if (saved) pruneCache()
+            }
           }
 
-          // Short texts never reach the 1.5 s mark: start them now.
-          if (!started && totalWrittenFrames > 0 && !cancelled && activeId == id) begin()
-
           // Wait until everything written has been played. Give up if the position stops moving for 4 s.
-          if (started && !cancelled && activeId == id) {
+          val t = track
+          if (t != null && started && !cancelled && activeId == id) {
             var lastHead = -1
             var lastMove = System.currentTimeMillis()
             while (!cancelled && activeId == id) {
-              val head = track.playbackHeadPosition
-              if (head >= totalWrittenFrames) break
+              val head = t.playbackHeadPosition
+              if (head >= totalFrames) break
               val now = System.currentTimeMillis()
               if (head != lastHead) { lastHead = head; lastMove = now }
               else if (now - lastMove > 4000) break
@@ -262,8 +424,10 @@ class OneFmVoiceModule : Module() {
             sendEvent("onError", mapOf("id" to id, "message" to (e.message ?: "Playback failed")))
           }
         } finally {
-          try { audioTrack?.stop(); audioTrack?.release() } catch (e: Exception) { }
-          if (currentAudioTrack === audioTrack) currentAudioTrack = null
+          try { out?.close() } catch (e: Exception) { }
+          if (!saved) { try { tmp?.delete() } catch (e: Exception) { } }
+          try { track?.stop(); track?.release() } catch (e: Exception) { }
+          if (currentAudioTrack === track) currentAudioTrack = null
           abandonAudioFocus()
           if (activeId == id) activeId = -1
         }

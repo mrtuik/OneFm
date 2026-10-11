@@ -1,6 +1,7 @@
 import { ChatMessage, ChatState, Story } from '../types';
 import { ProviderError, ProviderSettings, chatCompletion } from '../ai/provider';
-import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, parseReply } from '../ai/prompts';
+import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, parseReply, similarity } from '../ai/prompts';
+import { withRoleInfo } from './roles';
 import { runMemoryPipeline } from '../ai/memory';
 import { ensureLanguage } from '../ai/language';
 import { saveChat } from './store';
@@ -23,15 +24,27 @@ export interface TurnOptions {
 let counter = 0;
 const mid = () => `${Date.now().toString(36)}${(counter++).toString(36)}`;
 
+const REPEAT_LIMIT = 0.6;
+
 async function askModel(story: Story, chat: ChatState, finalUser: string, history: ChatMessage[], mode: TurnMode, cfg: ProviderSettings, key: string): Promise<Reply> {
-  const messages = buildTurnMessages(story, chat, finalUser, history, mode);
+  const base = buildTurnMessages(story, chat, finalUser, history, mode);
+  // The last few AI replies. A new reply that says almost the same thing is rejected and written again.
+  const recent = history.filter((m) => m.role === 'ai').slice(-2).map((m) => m.text);
   let lastRaw = '';
-  // Structured reply. If parsing fails, retry once, then show the plain text.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 1000, temperature: TEMP.chat });
+  let messages = base;
+  // Structured reply. If parsing fails or the reply repeats, retry (up to 3 tries), then show what we have.
+  let fallback: Reply | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 1000, temperature: attempt === 0 ? TEMP.chat : Math.min(1, TEMP.chat + 0.1) });
     const parsed = parseReply(lastRaw);
-    if (parsed) return { ...parsed, display_text: await ensureLanguage(story.language, parsed.display_text, cfg, key) };
+    if (!parsed) continue;
+    const repeated = mode !== 'begin' && recent.some((t) => similarity(parsed.display_text, t) >= REPEAT_LIMIT);
+    if (!repeated) return { ...parsed, display_text: await ensureLanguage(story.language, parsed.display_text, cfg, key) };
+    fallback = parsed;
+    const last = base[base.length - 1];
+    messages = [...base.slice(0, -1), { ...last, content: `${last.content}\n\n[Your previous attempt repeated an earlier reply. Write a completely different reply that answers the user's message first and adds something new. Do not reuse the earlier opening line or scene description.]` }];
   }
+  if (fallback) return { ...fallback, display_text: await ensureLanguage(story.language, fallback.display_text, cfg, key) };
   const plain = lastRaw.trim();
   if (!plain) throw new ProviderError('bad_reply', 'The AI sent a reply that could not be read.');
   return { speaker: 'Narrator', display_text: plain, speech_text: cleanSpeech(plain) || plain.replace(/\*/g, ''), choices: [], episode_complete: false };
@@ -41,7 +54,9 @@ async function askModel(story: Story, chat: ChatState, finalUser: string, histor
  * Runs one turn of the story. `commit` is called after every visible change so the screen can update.
  * Returns the final chat state. Throws ProviderError when the AI call fails (the user message is kept).
  */
-export async function takeTurn(story: Story, start: ChatState, opts: TurnOptions, cfg: ProviderSettings, key: string, commit: (c: ChatState) => void): Promise<ChatState> {
+export async function takeTurn(storyIn: Story, start: ChatState, opts: TurnOptions, cfg: ProviderSettings, key: string, commit: (c: ChatState) => void): Promise<ChatState> {
+  // Fill in the full story bible (setting, tone, secrets, example dialogue) when the saved story only has the short version.
+  const story = withRoleInfo(storyIn);
   let chat = start;
   const push = (c: ChatState) => { chat = c; commit(c); saveChat(c); };
 

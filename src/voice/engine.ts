@@ -191,19 +191,15 @@ export function stopSpeaking() {
   idle();
 }
 
-/** The voice starts after its first sentence is generated, so a long first sentence means a long silence. Cut it at a comma. */
-function shortFirstSentence(text: string): string {
-  const end = text.search(/[.]/);
-  const first = end < 0 ? text : text.slice(0, end);
-  if (first.length <= 70) return text;
-  const cut = first.indexOf(',', 25);
-  if (cut < 0 || cut > 90) return text;
-  return `${text.slice(0, cut)}.${text.slice(cut + 1)}`;
+/** Short stable key for a message voice: the same voice and text always map to the same saved audio file. */
+function cacheKeyOf(voiceId: string, text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return `${voiceId}_${h.toString(36)}_${text.length}`;
 }
 
 /** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */
 export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
-  text = shortFirstSentence(text);
   const my = ++token;
   const voice = resolveVoice(lang, voiceId);
   lastError = null;
@@ -211,11 +207,15 @@ export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
   activeJob = -1;
   emit({ id, loading: true });
 
+  const key = cacheKeyOf(voice.id, text);
   (async () => {
-    await ensureLoaded(voice);
+    // A message that was played before is saved as audio: no model needed, it starts at once.
+    let cached = false;
+    try { cached = !!Native?.hasCache?.(key); } catch { cached = false; }
+    if (!cached) await ensureLoaded(voice);
     if (my !== token) return;
     activeJob = ++jobCounter;
-    Native.speak(activeJob, text, 1.0, voice.sid);
+    Native.speak(activeJob, text, 1.0, voice.sid, key);
   })().catch((e: any) => {
     if (my !== token) return;
     lastError = String(e?.message ?? e);

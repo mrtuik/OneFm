@@ -10,10 +10,17 @@ export function withRoleInfo(story: Story): Story {
   if (!sample) return story;
   return {
     ...story,
+    // Bible fields missing in the saved story come from the bundled sample.
+    setting: story.setting ?? sample.setting,
+    tone: story.tone ?? sample.tone,
+    centralQuestion: story.centralQuestion ?? sample.centralQuestion,
+    rules: story.rules?.length ? story.rules : sample.rules,
+    secrets: story.secrets?.length ? story.secrets : sample.secrets,
+    openingLine: story.openingLine ?? sample.openingLine,
+    episodes: story.episodes.map((e, i) => ({ ...sample.episodes[i], ...Object.fromEntries(Object.entries(e).filter(([, v]) => v !== undefined && v !== '')) })) as Story['episodes'],
     characters: story.characters.map((c) => {
-      if (c.gender) return c;
       const m = sample.characters.find((x) => x.name === c.name);
-      return m?.gender ? { ...c, gender: m.gender } : c;
+      return m ? { ...m, ...Object.fromEntries(Object.entries(c).filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))) } as typeof c : c;
     }),
   };
 }

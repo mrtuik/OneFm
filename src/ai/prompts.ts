@@ -16,7 +16,7 @@ const LANG_NOTE: Record<Lang, string> = {
 
 const LANGUAGE_RULE: Record<Lang, string> = {
   en: 'Language: natural, simple Indian English for narration and dialogue. speech_text is the same text in plain English.',
-  bn: 'Language: Banglish, which is Bangla written in English letters, the way people text. The narration is Banglish too, never English sentences. display_text must be in English letters only. speech_text must be the same content written in Bengali script (বাংলা) so a voice can read it correctly.',
+  bn: 'Language: Banglish, which is Bangla written in English letters, the way people text. The narration is Banglish too, never English sentences. display_text must be in English letters only. speech_text must be the same content written in Bengali script (বাংলা) so a voice can read it correctly. Natural Banglish guide: write like a real Kolkata person texting. Use tumi/tomake/tomar for one person (tomader only for many people). Keep sentences short and spoken, not bookish. Use real verbs people say: bosho, dekho, shono, chole ashi, bhalo lagche, jaao, ashchi. GOOD narration: \"Mitali counter e cha chhanche, tomar dike takay na.\" GOOD dialogue: \"Hmm. Tin bochhor por. Boso, bhije gechho to.\" BAD (never write): \"Shey coffee machine er pase thakte thakte cup ta haat e niye tomader dike takay.\" (clumsy, wrong pronoun), \"Ritwik er chokh e kichu bhulano alo\" (meaningless), \"chhup chhup kore likhcho\" (unnatural). If a phrase would sound odd said aloud in Bangla, rewrite it simply.',
   hi: 'Language: Hinglish, which is Hindi written in English letters, the way people text. The narration is Hinglish too, never English sentences (write "Dhoop chai ki tapri par pad rahi thi", not "The sun fell on the tapri"). display_text must be in English letters only. speech_text must be the same content written in Devanagari script (हिन्दी) so a voice can read it correctly.',
 };
 
@@ -50,6 +50,10 @@ export function masterPrompt(lang: Lang): string {
 11. Respect the current episode goal. Do not jump to later plot beats early.
 12. Slow burn: emotions and relationships develop gradually across episodes, not in one reply.
 13. Secrets are never revealed directly. Hint only when the story has earned it.
+14. ANSWER FIRST. The first paragraph of every reply must react to exactly what the user's role just said or did (their words are in the last user message). If they ask a question, the character answers it, or dodges it in a way that shows something. Never ignore it and never restart the scene.
+15. NEVER repeat or rephrase your previous reply, its opening line, its setting description or its question. Each reply happens a little later in time than the last and adds something new (a reaction, an object, a detail, a memory, a small event). Do not re-describe the weather, the room or the first greeting after the opening.
+16. In narration the user's role is only \"you\" (tumi). Never use their name in narration. Never describe the user's role's face, eyes, smile, voice, thoughts or feelings. You may only describe what the OTHER characters do, say, notice and what happens around you.
+17. Give the scene specific, concrete details from the story (objects, places, names, small memories from the story bible) instead of generic lines like \"the rain fell\" or \"the cafe smelled of coffee\".
 
 # EPISODES
 - The story is told in episodes, each with a goal. Move toward the goal of the current episode without rushing.
@@ -68,7 +72,7 @@ ${LANGUAGE_RULE[lang]} Everything the reader sees (narration, dialogue and choic
 Reply with ONE JSON object and nothing else, no markdown fences:
 {"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false}
 - speech_text: the same content as display_text in the same order, without asterisks, quotation marks, speaker labels (no "Name:"), brackets, emoji or any symbol, written so it sounds natural when read aloud. Only plain words with commas and full stops.
-- choices: 0 to 3 short ideas for what the user's role could say or do next, written from the user's own point of view, in the SAME language and script as display_text (Hinglish or Banglish, never English unless the story language is English). Example: "Usse puchho woh kya sawal hai". Use [] when not needed.`;
+- choices: always give 3 DIFFERENT ideas (one speaks, one does something, one asks or stays silent), each 4 to 10 words, specific to what just happened, never all starting with the same word, never "I will say nothing" type filler. Written as what the user's role could say or do next, written from the user's own point of view, in the SAME language and script as display_text (Hinglish or Banglish, never English unless the story language is English). Example: "Usse puchho woh kya sawal hai". Use [] when not needed.`;
 }
 
 function characterCard(c: Character): string {
@@ -86,7 +90,7 @@ function characterCard(c: Character): string {
 }
 
 function storyBible(story: Story): string {
-  const eps = story.episodes.map((e, i) => `${i + 1}. ${e.title ? `${e.title}: ` : ''}${e.goal}${e.hook ? ` (hook: ${e.hook})` : ''}`).join('\n');
+  const eps = story.episodes.map((e, i) => `${i + 1}. ${e.title ? `${e.title}: ` : ''}${e.goal}${e.scene ? ` [scene: ${e.scene}]` : ''}${e.hook ? ` (hook: ${e.hook})` : ''}`).join('\n');
   const secrets = [
     ...(story.secrets ?? []),
     ...(story.secrets?.length ? [] : story.characters.filter((c) => c.secret).map((c) => `${c.name}: ${c.secret}`)),
@@ -98,6 +102,7 @@ function storyBible(story: Story): string {
     story.setting ? `Setting: ${story.setting}` : null,
     story.tone ? `Tone: ${story.tone}` : null,
     story.centralQuestion ? `Central question: ${story.centralQuestion}` : null,
+    story.openingLine ? `Opening line idea (episode 1 only): ${story.openingLine}` : null,
     `Genres: ${story.genres.join(', ')}`,
     story.rules?.length ? `Story rules (must follow):\n${story.rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}` : null,
     '',
@@ -155,6 +160,7 @@ function rolesBlock(story: Story, chat: ChatState): string {
     lines.push('If the story bible has an unnamed main character ("you") that the user is not playing, that person is now a normal character played by you. Give them a fitting name from the story.');
   }
   if (chat.userGender) lines.push(`The user is ${chat.userGender}. When you address the user's role, use ${chat.userGender} grammar and forms.`);
+  lines.push('Narration addresses the user\'s role only as \"you\" (tumi). Do not narrate the user\'s role\'s eyes, face, smile or feelings.');
   const others = story.characters.filter((c) => c.name !== chat.userRole).map((c) => c.name);
   if (others.length) lines.push(`You play: ${others.join(', ')}, plus anyone else the scene needs.`);
   return lines.join('\n');
@@ -172,12 +178,15 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
       ? 'Begin episode 1 now. Set the scene and introduce the first character. Do not wait for the user.'
       : `Begin episode ${chat.ep} now. Open directly from the suspense hook the previous episode ended on.`);
   }
+  if (mode === 'turn') notes.push(`The user's role just said or did exactly this: \"${finalUser.replace(/\"/g, "'")}\". The first paragraph of your reply must react to it directly. Do NOT repeat, rephrase or restart your previous reply or the opening scene. Move the scene a little forward in time with something new.`);
   notes.push(LANG_NOTE[story.language]);
   if (mode === 'advance') notes.push('The user tapped Next without writing anything. Continue the scene with the next story beat: the other characters act and speak, the plot moves one step. Write nothing for the user\'s role.');
   if (mode === 'close') notes.push('This episode must end now (the message limit is reached or the user chose the next episode). Write the closing beat, end on a suspense hook, and set episode_complete to true.');
 
   const last = notes.length ? `${finalUser}\n\n[Director note, not part of the story: ${notes.join(' ')}]` : finalUser;
-  const hist = history.map(asHistory).filter((x): x is LlmMessage => !!x).slice(-HISTORY_LIMIT);
+  let hist = history.map(asHistory).filter((x): x is LlmMessage => !!x).slice(-HISTORY_LIMIT);
+  // A chat must not start with an assistant message (the opening is written without a user message).
+  if (hist.length && hist[0].role === 'assistant') hist = [{ role: 'user', content: 'Begin the story.' }, ...hist];
 
   return [
     { role: 'system', content: masterPrompt(story.language) },
@@ -185,6 +194,16 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
     ...hist,
     { role: 'user', content: last },
   ];
+}
+
+/** Share of words two texts have in common (0 to 1). Used to catch a reply that repeats the previous one. */
+export function similarity(a: string, b: string): number {
+  const A = new Set(words(a));
+  const B = new Set(words(b));
+  if (!A.size || !B.size) return 0;
+  let hit = 0;
+  A.forEach((w) => { if (B.has(w)) hit++; });
+  return hit / Math.min(A.size, B.size);
 }
 
 export interface Reply {

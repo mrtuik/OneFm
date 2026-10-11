@@ -1,5 +1,13 @@
 # One Fm changelog
 
+## V6.8
+- Fix: the AI no longer repeats the opening scene when you reply. Every turn now tells the model exactly what your role just said and that the first paragraph must answer it. The chat history no longer starts with an AI message.
+- Fix: a reply that is almost the same as the last two AI replies is rejected and written again (up to 3 tries).
+- Narration never describes your role (face, eyes, feelings). Your role is only "you / tumi". New rules: answer first, no re-describing the same scene, use concrete story details.
+- Banglish quality guide in the prompt (natural tumi / tomake / tomar, short spoken sentences, good and bad examples).
+- Suggestion chips: 3 different ideas (speak, act, ask or stay silent), 4 to 10 words, specific to what just happened.
+- "Brishti Bhora Bikel" now has a full story bible: setting, tone, rules, 3 secrets, full character cards with example dialogue, and episode scenes and hooks. Saved copies of this story get the missing bible fields automatically.
+
 ## V6.1
 - Keyboard: the composer is never hidden behind the keyboard again. KeyboardAvoidingView is back, but it is switched on only while the keyboard is open, so no gap stays when it closes. With the keyboard closed there is a small gap (24) above the system bar.
 - All chat screen words follow the story language: Hinglish for Hindi stories (Aage, Dobara, Agla episode, Kuch bolo..., role picker, menu, alerts, episode end card), Banglish for Bangla stories.
