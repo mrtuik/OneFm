@@ -1,5 +1,13 @@
 # One Fm changelog
 
+## V6.9.13
+- google-services.json replaced with the new one that has the Android client (type 1) with your SHA-1. Google Sign-In needs this.
+
+## V6.9.12
+- Lessons reach every reader at once: each time lessons change (studied, added or deleted), the admin's phone bumps `brain/meta/updatedAt`. Every phone checks that one small number when the app opens and downloads the new lessons if it changed (no more 12 hour wait).
+- Story brain screen: "Add a lesson yourself" (all languages or one language). It goes to everyone like the AI-learned ones.
+- database.rules.locked.json: `brain/meta` is readable by all, writable by admin.
+
 ## V6.9.11
 - Community tab is live: reader posts (story cards with cover, caption, like, Play), a + button to post, and a post menu (View profile, Report, Delete for the owner).
 - Post a story two ways: fill a short form, or paste the story JSON from the master prompt. Both are checked first (18+ characters, required fields, blocked words) and show a preview. A cover picture can be added from the gallery.

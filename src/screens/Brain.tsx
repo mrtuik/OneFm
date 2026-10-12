@@ -8,7 +8,7 @@ import { colors, radius, space } from '../theme';
 import { LANGS, LANG_LABEL, Lang } from '../types';
 import { useSettings } from '../state/settings';
 import { getApiKey } from '../ai/secure';
-import { Lesson, Source, addSource, deleteLesson, deleteSource, fetchLessons, listSources, splitPages, studyOnce } from '../brain/brain';
+import { Lesson, Source, addLesson, addSource, deleteLesson, deleteSource, fetchLessons, listSources, splitPages, studyOnce } from '../brain/brain';
 
 function Card({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
@@ -35,6 +35,8 @@ export default function Brain() {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [mine, setMine] = useState('');
+  const [mineScope, setMineScope] = useState<'all' | Lang>('all');
 
   const reload = useCallback(async () => {
     try {
@@ -90,6 +92,13 @@ export default function Brain() {
     } catch (e: any) {
       Alert.alert('Saving failed', String(e?.message ?? e));
     } finally { setBusy(null); }
+  };
+
+  const saveMine = async () => {
+    try {
+      const l = await addLesson(mine, mineScope);
+      setLessons((x) => [l, ...x]); setMine('');
+    } catch (e: any) { Alert.alert('Could not add', String(e?.message ?? e)); }
   };
 
   const study = async () => {
@@ -160,6 +169,15 @@ export default function Brain() {
             <Pressable onPress={() => removeSource(x)} hitSlop={8}><Ionicons name="trash-outline" size={20} color={colors.sub} /></Pressable>
           </View>
         ))}
+      </Card>
+
+      <Card title="Add a lesson yourself" hint="One clear tip for the story writer, 20 to 260 characters. It reaches every reader the next time they open the app.">
+        <TextInput style={[s.input, { minHeight: 80, paddingTop: 12 }]} placeholder="Example: Let a character answer a question with an action, not words." placeholderTextColor={colors.sub} value={mine} onChangeText={setMine} multiline textAlignVertical="top" maxLength={260} />
+        <View style={s.row}>
+          <Chip label="All languages" active={mineScope === 'all'} onPress={() => setMineScope('all')} />
+          {LANGS.map((l) => <Chip key={l} label={LANG_LABEL[l] + ' only'} active={mineScope === l} onPress={() => setMineScope(l)} />)}
+        </View>
+        <GradientButton title="Add lesson" onPress={saveMine} disabled={mine.trim().length < 20} />
       </Card>
 
       <Card title={`What it learned (${lessons.length})`} hint="A few of these go into every story chat. Delete any that look wrong.">

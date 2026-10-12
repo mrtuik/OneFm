@@ -37,30 +37,64 @@ const toLessons = (v: Record<string, any> | null): Lesson[] =>
     .map(([id, x]) => ({ id, text: x.text, tag: x.tag ?? 'craft', scope: x.scope ?? 'all', sourceTitle: x.sourceTitle, createdAt: x.createdAt ?? 0 }))
     .sort((a, b) => b.createdAt - a.createdAt);
 
+/** The admin bumps this number every time lessons change. Every phone checks it (a tiny read) when the app opens. */
+async function remoteVersion(): Promise<number | null> {
+  const v = (await get(ref(db(), 'brain/meta/updatedAt'))).val();
+  return typeof v === 'number' ? v : null;
+}
+const touch = () => set(ref(db(), 'brain/meta/updatedAt'), Date.now()).catch(() => {});
+const saveCache = (items: Lesson[], ver: number | null) =>
+  AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), ver, items })).catch(() => {});
+
 export async function fetchLessons(): Promise<Lesson[]> {
+  const ver = await remoteVersion().catch(() => null);
   const list = toLessons((await get(ref(db(), 'brain/lessons'))).val());
   LESSONS = list;
-  AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), items: list })).catch(() => {});
+  saveCache(list, ver);
   return list;
 }
 
-/** Loads the lessons from the phone's cache at once, and refreshes them from the database when the cache is old. */
+/**
+ * Loads the lessons from the phone's cache at once. Then it asks the database for the lesson version number:
+ * when the admin changed anything, the new lessons are downloaded now. Without that number the cache is refreshed every 12 hours.
+ */
 export async function warmBrain() {
   try {
+    let cached: { at?: number; ver?: number | null } = {};
     const raw = await AsyncStorage.getItem(CACHE_KEY);
     if (raw) {
       const c = JSON.parse(raw);
       if (Array.isArray(c.items)) LESSONS = c.items;
-      if (Date.now() - (c.at ?? 0) < 12 * 3600 * 1000) return;
+      cached = c;
     }
-    await fetchLessons();
+    const ver = await remoteVersion();
+    if (ver !== null) {
+      if (cached.ver !== ver) await fetchLessons();
+    } else if (Date.now() - (cached.at ?? 0) > 12 * 3600 * 1000) {
+      await fetchLessons();
+    }
   } catch {}
+}
+
+/** Admin: write a lesson by hand. It reaches every phone the next time the app opens. */
+export async function addLesson(text: string, scope: 'all' | Lang): Promise<Lesson> {
+  const t = text.trim();
+  if (t.length < 20 || t.length > 260) throw new Error('A lesson needs 20 to 260 characters.');
+  const node = { text: t, tag: 'manual', scope, sourceTitle: 'Added by admin', createdAt: Date.now() };
+  const k = push(ref(db(), 'brain/lessons'));
+  await set(k, node);
+  await touch();
+  const lesson: Lesson = { id: k.key!, ...node };
+  LESSONS = [lesson, ...LESSONS];
+  saveCache(LESSONS, null);
+  return lesson;
 }
 
 export async function deleteLesson(id: string) {
   await remove(ref(db(), `brain/lessons/${id}`));
+  await touch();
   LESSONS = LESSONS.filter((l) => l.id !== id);
-  AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), items: LESSONS })).catch(() => {});
+  saveCache(LESSONS, null);
 }
 
 // ---------- sources ----------
@@ -185,10 +219,12 @@ export async function studyOnce(cfg: ProviderSettings, apiKey: string): Promise<
   AsyncStorage.setItem(LAST_KEY, String(Date.now())).catch(() => {});
 
   // Keep the list small: the oldest lessons go first.
+  if (added.length) await touch();
   const all = await fetchLessons();
   if (all.length > MAX_LESSONS) {
     const drop = all.slice(MAX_LESSONS);
     await update(ref(db()), Object.fromEntries(drop.map((l) => [`brain/lessons/${l.id}`, null])));
+    await touch();
     LESSONS = all.slice(0, MAX_LESSONS);
   }
   return { added, source: src.title, pages: count };

@@ -8,41 +8,20 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:254854939387:android:d43ff998d2c4bc2a10a65e",
-        "android_client_info": {
-          "package_name": "com.onefm.app"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "254854939387-qng634gkqpamdo7u5lb1eu07m4k5hshs.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyApZg8OQpd2XDyPq8-GY2UmGWbOmVEx5KQ"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "254854939387-qng634gkqpamdo7u5lb1eu07m4k5hshs.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
         "mobilesdk_app_id": "1:254854939387:android:a7535101f92f061210a65e",
         "android_client_info": {
           "package_name": "com.onefm.tuik"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "254854939387-a3ju2e3i7nmihtr0q5n2s8gd8etr816v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.onefm.tuik",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
         {
           "client_id": "254854939387-qng634gkqpamdo7u5lb1eu07m4k5hshs.apps.googleusercontent.com",
           "client_type": 3

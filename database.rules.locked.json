@@ -49,6 +49,10 @@
       "pages": {
         ".read": "auth != null && root.child('config/admins').child(auth.uid).val() === true",
         ".write": "auth != null && root.child('config/admins').child(auth.uid).val() === true"
+      },
+      "meta": {
+        ".read": true,
+        ".write": "auth != null && root.child('config/admins').child(auth.uid).val() === true"
       }
     },
     "reports": {
