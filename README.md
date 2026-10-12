@@ -59,3 +59,10 @@ Pushing a tag (`git tag v0.1.0 && git push --tags`) uploads the signed APK to a 
 ## Status
 Done: 18+ gate, email, Google and guest login, language select, Home, Search, Pocket-style story page, like, Chats list, Chat with AI replies, provider settings, episode memory, voice chips with on-device sherpa-onnx voices, Profile.
 Next: Community (M5), Library and profile stats (M6), moderation (M7).
+
+## Community, profiles and the story brain
+- Data: `posts/<id>` (the full story travels inside the post), `users/<uid>` (name, bio, avatarUrl, postLikes), `brain/sources`, `brain/pages`, `brain/lessons`, `config/admins/<uid>`.
+- Admin: add your user id at `config/admins/<uid> = true` in the Firebase console. Admin can feature posts on Home, delete any post, and open Profile > Developer > Story brain.
+- Story brain: add a novel as text (.txt/.md, paste, or a raw link). It is cut into ~1800 character pages. The app reads 2 or 3 pages, saves short technique lessons in `brain/lessons`, keeps at most 60, and `brainBlock()` in `src/brain/brain.ts` puts 8 of them in the master prompt. Code: `src/brain/brain.ts`, `src/screens/Brain.tsx`.
+- Rules: `database.rules.json` is open for development. Switch to `database.rules.locked.json` when you are ready: posts need sign-in, novel pages are admin-only, lessons are public to read. It needs `.indexOn` for posts (already included). Test the admin features with the locked rules before you publish them.
+- Cover art: `assets/covers/<storyId>.jpg`, mapped in `src/data/covers.ts`. User stories carry their own `image` (small data link).

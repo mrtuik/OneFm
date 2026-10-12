@@ -4,13 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GradientView } from '../components/GradientView';
-import { GENRE_ICON, StoryTitle } from '../components/StoryCard';
+import { StoryTitle } from '../components/StoryCard';
+import { Cover } from '../components/Cover';
 import { Chip } from '../components/Ui';
 import { compact } from '../format';
 import { colors, poster, radius, space } from '../theme';
 import { ChatState, LANG_LABEL, Story } from '../types';
 import { loadChat } from '../chat/store';
 import { isLiked, setLiked } from '../firebase/db';
+import { isPostLiked, setPostLiked } from '../firebase/community';
 import { getAuth } from '@react-native-firebase/auth';
 
 type Tab = 'episodes' | 'details';
@@ -25,7 +27,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function StoryDetail() {
-  const { story } = useRoute<any>().params as { story: Story };
+  const { story, postId } = useRoute<any>().params as { story: Story; postId?: string };
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('episodes');
@@ -34,7 +36,7 @@ export default function StoryDetail() {
   const [likes, setLikes] = useState(story.likeCount);
 
   useFocusEffect(useCallback(() => { loadChat(story.id).then(setChat); }, [story.id]));
-  useEffect(() => { isLiked(story.id).then(setLikedState); }, [story.id]);
+  useEffect(() => { (postId ? isPostLiked(postId) : isLiked(story.id)).then(setLikedState); }, [story.id, postId]);
 
   const started = !!chat && chat.messages.length > 0;
   const currentEp = started ? chat!.ep : 1;
@@ -45,7 +47,7 @@ export default function StoryDetail() {
     const next = !liked;
     setLikedState(next);
     setLikes((n) => Math.max(0, n + (next ? 1 : -1)));
-    try { await setLiked(story.id, next); }
+    try { await (postId ? setPostLiked(postId, next) : setLiked(story.id, next)); }
     catch (e: any) {
       setLikedState(!next);
       setLikes((n) => Math.max(0, n + (next ? -1 : 1)));
@@ -59,11 +61,9 @@ export default function StoryDetail() {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space.section }}>
         <GradientView from={story.cover[0]} to={colors.bg} style={[s.top, { paddingTop: insets.top + 64 }]}>
-          <View style={s.poster}>
-            <GradientView from={story.cover[0]} to={story.cover[1]} fromOpacity={1} toOpacity={0.85} diagonal style={StyleSheet.absoluteFill} />
-            <Ionicons name={GENRE_ICON[story.genres[0]] ?? 'book'} size={84} color="rgba(255,255,255,0.3)" />
+          <Cover story={story} iconSize={84} style={s.poster}>
             <View style={s.ribbon}><Text style={s.ribbonText}>{compact(story.playCount)} PLAYS</Text></View>
-          </View>
+          </Cover>
           <View style={s.actions}>
             <Pressable onPress={toggleLike} style={[s.btn, s.btnLight]} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
               <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? colors.accent : '#1A0F0F'} />
@@ -91,13 +91,13 @@ export default function StoryDetail() {
 
           <Text style={s.logline}>{story.logline}</Text>
 
-          <View style={s.creator}>
+          <Pressable style={s.creator} disabled={!story.creatorUid} onPress={() => story.creatorUid && nav.navigate('UserProfile', { uid: story.creatorUid })}>
             <View style={s.creatorAvatar}><Text style={s.creatorInitial}>{story.creatorName.charAt(0).toUpperCase()}</Text></View>
             <View>
               <Text style={s.creatorName}>{story.creatorName}</Text>
-              <Text style={s.creatorSub}>Creator</Text>
+              <Text style={s.creatorSub}>{story.creatorUid ? 'Creator  ·  tap to see profile' : 'Creator'}</Text>
             </View>
-          </View>
+          </Pressable>
         </View>
 
         <View style={s.tabs}>
@@ -172,7 +172,7 @@ export default function StoryDetail() {
 
 const s = StyleSheet.create({
   top: { alignItems: 'center', gap: 20, paddingBottom: space.section },
-  poster: { width: poster.detailSize, height: poster.detailSize, borderRadius: radius.card, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  poster: { width: poster.detailSize, height: poster.detailSize, borderRadius: radius.card },
   ribbon: { position: 'absolute', top: 12, right: 0, backgroundColor: colors.accent, paddingHorizontal: 8, paddingVertical: 4, borderTopLeftRadius: radius.badge, borderBottomLeftRadius: radius.badge },
   ribbonText: { color: colors.onAccent, fontSize: 11, fontWeight: '800' },
   actions: { flexDirection: 'row', gap: space.gap },

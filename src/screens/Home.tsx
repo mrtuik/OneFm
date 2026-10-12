@@ -42,6 +42,7 @@ export default function Home() {
       .filter((x): x is { c: ChatState; story: Story } => !!x.story);
     const rows: Row[] = [
       ...(cont.length ? [{ title: 'Continue Chat', items: cont.map((x) => x.story), labels: Object.fromEntries(cont.map((x) => [x.story.id, `Ep ${x.c.ep}`])) }] : []),
+      { title: 'From the community', label: 'Community', items: stories.filter((x) => x.fromCommunity).sort((a, b) => b.createdAt - a.createdAt) },
       { title: 'Top 10', label: 'Top 10', items: [...stories].sort((a, b) => b.likeCount - a.likeCount).slice(0, 10) },
       { title: 'New', label: 'New', items: [...stories].sort((a, b) => b.createdAt - a.createdAt) },
       ...GENRES.map((g) => ({ title: g, label: undefined, items: stories.filter((x) => x.genres.includes(g)) })),

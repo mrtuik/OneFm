@@ -49,6 +49,13 @@ export interface Story {
   createdAt: number;
   readMin: number;
   cover: [string, string];
+  /** Cover picture as an https link or a small data: URI. Optional, the gradient is used without it. */
+  image?: string;
+  /** Set on stories that came from the Community tab. */
+  creatorUid?: string;
+  fromCommunity?: boolean;
+  /** The community post this story belongs to. */
+  postId?: string;
   /** Max messages (yours and the AI's) inside one episode. Defaults to 40. */
   messageLimit?: number;
 }
@@ -91,4 +98,18 @@ export interface ChatState {
   /** Gender of the reader when the role was chosen. The AI uses it for Hindi grammar (gaya / gayi). */
   userGender?: Gender;
   updatedAt: number;
+}
+
+/** A story shared in the Community tab. The full story travels inside the post. */
+export interface Post {
+  id: string;
+  creatorUid: string;
+  creatorName: string;
+  creatorAvatar?: string;
+  createdAt: number;
+  caption?: string;
+  story: Story;
+  likeCount: number;
+  /** True when the admin put the story on the Home page. */
+  featured?: boolean;
 }

@@ -1,5 +1,16 @@
 # One Fm changelog
 
+## V6.9.11
+- Community tab is live: reader posts (story cards with cover, caption, like, Play), a + button to post, and a post menu (View profile, Report, Delete for the owner).
+- Post a story two ways: fill a short form, or paste the story JSON from the master prompt. Both are checked first (18+ characters, required fields, blocked words) and show a preview. A cover picture can be added from the gallery.
+- Admin: in a post menu choose "Show on Home". The story is copied to the Home page list and appears in a new "From the community" row. "Remove from Home" takes it off. Admin = your user id listed at config/admins/<id> = true (Profile > Developer has a Copy my user id button).
+- Public profile for every reader (avatar, name, bio, stories, likes). Tap a creator anywhere. Your own profile can be edited. Profile > "My public profile and stories".
+- Story brain (admin, Profile > Developer): add novels as text (file, paste or link), saved in Realtime Database as small pages. Every few hours (or Study now) the app reads 2 or 3 pages, writes down writing techniques (never copied text), and a few of those lessons are added to every story chat. Novel pages can be read by admin only. The lessons are shared with everyone.
+- Cover art for all 11 stories, shown on cards, Home hero and the story page. Stories with an `image` field use it.
+- Chat options sheet moved to a shared component (also used by the Community post menu).
+- New packages: expo-document-picker, expo-image-picker, expo-image-manipulator (CI aligns versions with `expo install --fix`).
+- database.rules.locked.json updated for posts, brain and admins (see README).
+
 ## V6.9.10
 - Voice numbers (model, first sound, audio made, level, rms, dc) are gone from chat and Profile, and the small info icon is gone too. Real errors still show under the voice.
 - Your message is now a WhatsApp-style bubble: right side, no name label, smaller corners, tight padding. The voice chip and the Next / Again / Next episode buttons have smaller corners too.

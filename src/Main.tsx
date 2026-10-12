@@ -12,13 +12,20 @@ import Home from './screens/Home';
 import Search from './screens/Search';
 import StoryDetail from './screens/StoryDetail';
 import Profile from './screens/Profile';
-import { Community, Library } from './screens/Stubs';
+import { Library } from './screens/Stubs';
+import Community from './screens/Community';
+import CreatePost from './screens/CreatePost';
+import UserProfile from './screens/UserProfile';
+import Brain from './screens/Brain';
 import { Chats } from './screens/Chats';
 import Chat from './screens/Chat';
 import { AppHeader } from './components/AppHeader';
 import { TabBar } from './components/TabBar';
 import { colors } from './theme';
 import { warmVoice } from './voice/engine';
+import { warmBrain, maybeStudy } from './brain/brain';
+import { isAdmin } from './firebase/community';
+import { getApiKey } from './ai/secure';
 import type { User } from './firebase/auth';
 
 const Stack = createNativeStackNavigator();
@@ -50,6 +57,14 @@ function Root() {
   // Load the voice model while the app opens: it takes several seconds, so the first message does not wait for it.
   useEffect(() => { if (loaded && s.language) warmVoice(s.language, s.voices[s.language]); }, [loaded, s.language]);
 
+  // Story lessons learned by the app (shared by everyone). Loaded from the phone cache first.
+  useEffect(() => { warmBrain(); }, []);
+  // Admin only: now and then the app studies a few pages of the saved novels, quietly, at most once every few hours.
+  useEffect(() => {
+    if (!loaded || !user) return;
+    isAdmin(user.uid).then(async (a) => { if (a) maybeStudy(s.provider, await getApiKey()); });
+  }, [loaded, user?.uid]);
+
   if (!loaded || !ready) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
@@ -71,6 +86,9 @@ function Root() {
         <Stack.Screen name="Chat" component={Chat} options={{ headerShown: false }} />
         <Stack.Screen name="Profile" component={Profile} />
         <Stack.Screen name="Library" component={Library} />
+        <Stack.Screen name="CreatePost" component={CreatePost} options={{ title: 'Post a story' }} />
+        <Stack.Screen name="UserProfile" component={UserProfile} options={{ title: 'Profile' }} />
+        <Stack.Screen name="Brain" component={Brain} options={{ title: 'Story brain' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -3,19 +3,61 @@
     "stories": {
       ".read": true,
       "$id": {
-        ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid)",
-        "playCount": { ".write": "auth != null", ".validate": "newData.isNumber()" },
-        "likeCount": { ".write": "auth != null", ".validate": "newData.isNumber() && newData.val() >= 0" }
+        ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid || root.child('config/admins').child(auth.uid).val() === true)",
+        "playCount": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber()"
+        },
+        "likeCount": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        }
       }
     },
     "posts": {
       ".read": true,
-      "$id": { ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid)" }
+      ".indexOn": [
+        "createdAt",
+        "creatorUid"
+      ],
+      "$id": {
+        ".write": "auth != null && (!data.exists() || data.child('creatorUid').val() === auth.uid || root.child('config/admins').child(auth.uid).val() === true)",
+        "likeCount": {
+          ".write": "auth != null",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "featured": {
+          ".write": "auth != null && root.child('config/admins').child(auth.uid).val() === true"
+        }
+      }
     },
     "users": {
-      "$uid": { ".read": true, ".write": "auth != null && auth.uid === $uid" }
+      "$uid": {
+        ".read": true,
+        ".write": "auth != null && auth.uid === $uid"
+      }
     },
-    "reports": { ".read": false, ".write": "auth != null" },
-    "config": { ".read": true, ".write": false }
+    "brain": {
+      "lessons": {
+        ".read": true,
+        ".write": "auth != null && root.child('config/admins').child(auth.uid).val() === true"
+      },
+      "sources": {
+        ".read": "auth != null && root.child('config/admins').child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('config/admins').child(auth.uid).val() === true"
+      },
+      "pages": {
+        ".read": "auth != null && root.child('config/admins').child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('config/admins').child(auth.uid).val() === true"
+      }
+    },
+    "reports": {
+      ".read": false,
+      ".write": "auth != null"
+    },
+    "config": {
+      ".read": true,
+      ".write": false
+    }
   }
 }

@@ -13,6 +13,9 @@ import { PRESETS, Preset, ProviderSettings, testConnection } from '../ai/provide
 import { getApiKey, setApiKey } from '../ai/secure';
 import { VoiceInfo, downloadVoice, getVoiceError, subscribeVoiceError, warmVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
+import { isAdmin } from '../firebase/community';
+import * as Clipboard from 'expo-clipboard';
+import { useNavigation } from '@react-navigation/native';
 
 const SAMPLE: Record<Lang, string> = {
   en: 'Hello, this is how your story will sound.',
@@ -91,6 +94,8 @@ export default function Profile() {
   const { s: st, update } = useSettings();
   const { user } = useAuthUser();
   const insets = useSafeAreaInsets();
+  const nav = useNavigation<any>();
+  const [admin, setAdmin] = useState(false);
   const [busy, setBusy] = useState(false);
   const lang = st.language ?? 'bn';
 
@@ -99,6 +104,7 @@ export default function Profile() {
   const [testing, setTesting] = useState(false);
 
   useEffect(() => { getApiKey().then(setKey); }, []);
+  useEffect(() => { isAdmin(user?.uid).then(setAdmin); }, [user?.uid]);
   useEffect(() => () => stopSpeaking(), [lang]);
 
   const name = user ? user.displayName ?? user.email ?? 'Reader' : 'Guest';
@@ -142,6 +148,8 @@ export default function Profile() {
         <Text style={s.name}>{name}</Text>
         {sub ? <Text style={s.sub}>{sub}</Text> : null}
       </View>
+
+      {user ? <OutlineButton title="My public profile and stories" icon="person-circle-outline" onPress={() => nav.navigate('UserProfile', { uid: user.uid })} /> : null}
 
       <Section title="Reading language" hint="Stories are shown in this language.">
         <View style={s.row}>
@@ -192,7 +200,14 @@ export default function Profile() {
       </Section>
 
       <Section title="Developer">
+        {admin ? <OutlineButton title="Story brain (novels and lessons)" icon="sparkles-outline" onPress={() => nav.navigate('Brain')} /> : null}
         <OutlineButton title={busy ? 'Seeding...' : 'Seed sample stories to database'} onPress={seed} />
+        {user ? (
+          <View style={{ gap: 6 }}>
+            <Text style={s.hint}>{admin ? 'You are an admin.' : 'To become admin, add this id in the Firebase console at config/admins/<id> = true.'}</Text>
+            <OutlineButton title={`Copy my user id (${user.uid.slice(0, 6)}...)`} icon="copy-outline" onPress={async () => { await Clipboard.setStringAsync(user.uid); Alert.alert('Copied', 'Your user id is on the clipboard.'); }} />
+          </View>
+        ) : null}
       </Section>
 
       <View style={{ marginTop: space.gap }}>

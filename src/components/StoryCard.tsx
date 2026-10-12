@@ -3,11 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, poster, radius, space } from '../theme';
 import { Story } from '../types';
-import { IconName } from './Ui';
+import { Cover } from './Cover';
+import { GENRE_ICON } from './genreIcon';
 
-export const GENRE_ICON: Record<string, IconName> = {
-  Romance: 'heart', Thriller: 'eye', Horror: 'skull', Fantasy: 'sparkles', Campus: 'school',
-};
+export { GENRE_ICON };
 
 export function StoryTitle({ story, style }: { story: Story; style?: object }) {
   const i = story.title.indexOf(story.highlight);
@@ -23,18 +22,15 @@ export function StoryTitle({ story, style }: { story: Story; style?: object }) {
 
 /** hero = wide poster, tile = square poster in a horizontal row, row = small square poster in a list */
 export type CardVariant = 'hero' | 'tile' | 'row';
-interface Props { story: Story; onPress: () => void; variant?: CardVariant; label?: string }
+interface Props { story: Story; onPress: () => void; onLongPress?: () => void; variant?: CardVariant; label?: string }
 
-export function StoryCard({ story, onPress, variant = 'tile', label }: Props) {
-  const icon = GENRE_ICON[story.genres[0]] ?? 'book';
+export function StoryCard({ story, onPress, onLongPress, variant = 'tile', label }: Props) {
   const meta = `${story.episodes.length} episodes, ${story.readMin} min each`;
 
   if (variant === 'row') {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [s.card, s.rowCard, { opacity: pressed ? 0.9 : 1 }]}>
-        <View style={[s.rowCover, { backgroundColor: story.cover[0] }]}>
-          <Ionicons name={icon} size={36} color="rgba(255,255,255,0.3)" />
-        </View>
+      <Pressable onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => [s.card, s.rowCard, { opacity: pressed ? 0.9 : 1 }]}>
+        <Cover story={story} iconSize={36} style={s.rowCover} />
         <View style={s.rowBody}>
           <Text style={s.genre}>{story.genres[0]}</Text>
           <StoryTitle story={story} style={s.tileTitle} />
@@ -47,9 +43,8 @@ export function StoryCard({ story, onPress, variant = 'tile', label }: Props) {
 
   const hero = variant === 'hero';
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [s.card, hero ? { width: '100%' } : { width: poster.tileWidth }, { opacity: pressed ? 0.9 : 1 }]}>
-      <View style={[s.cover, { backgroundColor: story.cover[0], aspectRatio: hero ? poster.wideRatio : 1 }]}>
-        <Ionicons name={icon} size={hero ? 72 : 44} color="rgba(255,255,255,0.3)" />
+    <Pressable onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => [s.card, hero ? { width: '100%' } : { width: poster.tileWidth }, { opacity: pressed ? 0.9 : 1 }]}>
+      <Cover story={story} iconSize={hero ? 72 : 44} style={[s.cover, { aspectRatio: hero ? poster.wideRatio : 1 }]}>
         <View style={s.badges}>
           <View style={s.badge}><Text style={s.badgeText}>{story.genres[0]}</Text></View>
           {label ? <View style={[s.badge, { backgroundColor: colors.accent }]}><Text style={[s.badgeText, { color: colors.onAccent }]}>{label}</Text></View> : null}
@@ -57,7 +52,7 @@ export function StoryCard({ story, onPress, variant = 'tile', label }: Props) {
         {hero ? null : (
           <View style={[s.play, s.playOnCover]}><Ionicons name="play" size={14} color={colors.onAccent} style={{ marginLeft: 2 }} /></View>
         )}
-      </View>
+      </Cover>
       <View style={s.body}>
         <StoryTitle story={story} style={hero ? s.heroTitle : s.tileTitle} />
         <Text style={s.logline} numberOfLines={2}>{story.logline}</Text>
@@ -86,6 +81,6 @@ const s = StyleSheet.create({
   play: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   playOnCover: { position: 'absolute', right: 12, bottom: 12, width: 32, height: 32, borderRadius: 16 },
   rowCard: { flexDirection: 'row', padding: 12, gap: space.gap, alignItems: 'center' },
-  rowCover: { width: poster.rowSize, height: poster.rowSize, borderRadius: radius.inner, alignItems: 'center', justifyContent: 'center' },
+  rowCover: { width: poster.rowSize, height: poster.rowSize, borderRadius: radius.inner },
   rowBody: { flex: 1, gap: 4 },
 });

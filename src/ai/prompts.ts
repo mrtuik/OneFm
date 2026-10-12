@@ -2,6 +2,7 @@ import { ChatMessage, ChatState, Character, Fact, Lang, Story } from '../types';
 import { LlmMessage } from './provider';
 import { isYou } from '../chat/roles';
 import { cleanSpeech } from '../format';
+import { brainBlock } from '../brain/brain';
 
 export const DEFAULT_MESSAGE_LIMIT = 40;
 /** Replies that claim the episode is done before this many messages are ignored. */
@@ -191,7 +192,7 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
   if (hist.length && hist[0].role === 'assistant') hist = [{ role: 'user', content: 'Begin the story.' }, ...hist];
 
   return [
-    { role: 'system', content: masterPrompt(story.language) },
+    { role: 'system', content: masterPrompt(story.language) + brainBlock(story.language) },
     { role: 'system', content: `${storyBible(story)}\n\n${rolesBlock(story, chat)}\n\n${memoryBlock(chat, finalUser)}\n\n${direction}` },
     ...hist,
     { role: 'user', content: last },
