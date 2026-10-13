@@ -1,16 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, Keyboard, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, space } from '../theme';
 
-export function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
+/**
+ * Bottom sheet. By default it holds a card of options (SheetItem rows) and the whole sheet can be dragged down to close.
+ * With `form` it holds free content (fields, lists): the content scrolls, it lifts above the keyboard, and only the top handle drags.
+ */
+export function Sheet({ visible, onClose, title, children, form }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode; form?: boolean }) {
   const insets = useSafeAreaInsets();
   const H = Dimensions.get('window').height;
   const y = useRef(new Animated.Value(H)).current;
   const [mounted, setMounted] = useState(visible);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    if (!form) return;
+    const a = Keyboard.addListener('keyboardDidShow', (e) => setKb(e.endCoordinates?.height ?? 0));
+    const b = Keyboard.addListener('keyboardDidHide', () => setKb(0));
+    return () => { a.remove(); b.remove(); };
+  }, [form]);
 
   useEffect(() => {
     if (visible) {
@@ -41,10 +52,16 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
       <View style={s2.backdrop}>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)', opacity: dim }]} />
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <Animated.View style={[s2.sheet, { paddingBottom: insets.bottom + 20, transform: [{ translateY: y }] }]} {...pan.panHandlers}>
-          <View style={s2.handle} />
-          {title ? <Text style={s2.sheetTitle}>{title}</Text> : null}
-          <View style={s2.sheetList}>{children}</View>
+        <Animated.View style={[s2.sheet, { paddingBottom: form && kb > 0 ? kb + 12 : insets.bottom + 20, transform: [{ translateY: y }] }]} {...(form ? {} : pan.panHandlers)}>
+          <View {...(form ? pan.panHandlers : {})}>
+            <View style={s2.handle} />
+            {title ? <Text style={s2.sheetTitle}>{title}</Text> : null}
+          </View>
+          {form ? (
+            <ScrollView style={{ maxHeight: H * 0.72 - kb * 0.5 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>
+          ) : (
+            <View style={s2.sheetList}>{children}</View>
+          )}
         </Animated.View>
       </View>
     </Modal>

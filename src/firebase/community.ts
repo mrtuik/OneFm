@@ -1,6 +1,6 @@
-import { getDatabase, ref, get, set, update, push, remove, query, orderByChild, equalTo, limitToLast, increment } from '@react-native-firebase/database';
+import { getDatabase, ref, get, set, update, push, remove, query, orderByChild, equalTo, limitToLast, increment, runTransaction } from '@react-native-firebase/database';
 import { getAuth } from '@react-native-firebase/auth';
-import { GENRES, Post, Story } from '../types';
+import { GENRES, Gender, Post, Story, Visibility } from '../types';
 
 const db = () => getDatabase();
 /** Realtime Database refuses `undefined`, so every object is cleaned before it is written. */
@@ -17,36 +17,112 @@ export async function isAdmin(uid?: string | null): Promise<boolean> {
 }
 
 // ---------- users ----------
-export interface PublicUser { uid: string; name: string; avatarUrl?: string; bio?: string; createdAt?: number }
+export interface PublicUser { uid: string; name: string; username?: string; gender?: Gender; avatarUrl?: string; bio?: string; createdAt?: number }
+
+const toUser = (uid: string, v: any): PublicUser => ({
+  uid,
+  name: v?.name || 'Reader',
+  username: v?.username || undefined,
+  gender: v?.gender === 'male' || v?.gender === 'female' ? v.gender : undefined,
+  avatarUrl: v?.avatarUrl || undefined,
+  bio: v?.bio || '',
+  createdAt: v?.createdAt,
+});
+
+/** Reads a profile and throws when the database cannot be reached. */
+const readUser = async (uid: string): Promise<PublicUser> => toUser(uid, (await get(ref(db(), `users/${uid}`))).val() ?? {});
 
 export async function fetchUser(uid: string): Promise<PublicUser> {
+  try { return await readUser(uid); } catch { return { uid, name: 'Reader' }; }
+}
+
+// ---------- usernames ----------
+// usernames/<name> = uid keeps every @username unique. The claim is a transaction, so two readers cannot get the same one.
+export const cleanUsername = (v: string) => v.trim().toLowerCase().replace(/^@+/, '');
+
+/** Returns a plain-words problem with the username, or null when it is fine. */
+export function usernameProblem(v: string): string | null {
+  if (v.length < 3) return 'Use at least 3 characters.';
+  if (v.length > 20) return 'Use at most 20 characters.';
+  if (!/^[a-z0-9_.]+$/.test(v)) return 'Only small letters, numbers, dot and underscore.';
+  if (/^[._]|[._]$/.test(v)) return 'It cannot start or end with a dot or underscore.';
+  if (/[._]{2}/.test(v)) return 'No two dots or underscores in a row.';
+  return null;
+}
+
+export async function isUsernameFree(name: string): Promise<boolean> {
+  const mine = getAuth().currentUser?.uid;
+  const v = (await get(ref(db(), `usernames/${name}`))).val();
+  return v == null || v === mine;
+}
+
+async function claimUsername(name: string, uid: string): Promise<boolean> {
+  const res = await runTransaction(ref(db(), `usernames/${name}`), (cur: any) => (cur == null || cur === uid ? uid : undefined));
+  return res.committed;
+}
+
+const claiming = new Set<string>();
+/** Gives a reader who has no username yet one made from their email (or name), with a number added if it is taken. */
+export async function ensureUsername(uid: string, seed: string) {
+  if (claiming.has(uid)) return;
+  claiming.add(uid);
   try {
-    const v = (await get(ref(db(), `users/${uid}`))).val() ?? {};
-    return { uid, name: v.name || 'Reader', avatarUrl: v.avatarUrl || undefined, bio: v.bio || '', createdAt: v.createdAt };
-  } catch {
-    return { uid, name: 'Reader' };
+    let base = seed.toLowerCase().replace(/[^a-z0-9_.]/g, '').replace(/^[._]+|[._]+$/g, '').slice(0, 14);
+    if (base.length < 3) base = (base + 'reader').slice(0, 8);
+    for (let i = 0; i < 6; i++) {
+      const name = i === 0 ? base : `${base}${Math.floor(100 + Math.random() * 900)}`;
+      if (await claimUsername(name, uid)) {
+        await update(ref(db(), `users/${uid}`), { username: name });
+        return;
+      }
+    }
+  } catch {} finally { claiming.delete(uid); }
+}
+
+export interface ProfileInput { name: string; username: string; bio: string; gender: Gender | null }
+
+/** Saves name, username, bio and gender. A new username is claimed first, the old one is let go after the save. */
+export async function saveMyProfile(p: ProfileInput) {
+  const u = getAuth().currentUser;
+  if (!u) throw new Error('Sign in first.');
+  const name = p.name.trim().slice(0, 40);
+  if (!name) throw new Error('Write your name.');
+  const username = cleanUsername(p.username);
+  const bad = usernameProblem(username);
+  if (bad) throw new Error(bad);
+
+  const before = ((await get(ref(db(), `users/${u.uid}/username`))).val() as string | null) ?? '';
+  if (before !== username && !(await claimUsername(username, u.uid))) throw new Error('That username is already taken. Try another one.');
+
+  await update(ref(db(), `users/${u.uid}`), { name, username, bio: p.bio.trim().slice(0, 160), ...(p.gender ? { gender: p.gender } : {}) });
+
+  if (before && before !== username) {
+    try { if ((await get(ref(db(), `usernames/${before}`))).val() === u.uid) await remove(ref(db(), `usernames/${before}`)); } catch {}
   }
 }
 
-export async function saveMyProfile(name: string, bio: string) {
-  const u = getAuth().currentUser;
-  if (!u) throw new Error('Sign in first.');
-  await update(ref(db(), `users/${u.uid}`), { name: name.trim().slice(0, 40) || 'Reader', bio: bio.trim().slice(0, 160) });
+/** Stores the reader's gender on their profile so it follows them to a new phone. Skipped for guests. */
+export async function saveMyGender(g: Gender) {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) return;
+  try { await update(ref(db(), `users/${uid}`), { gender: g }); } catch {}
 }
 
 // ---------- posts ----------
-const toPost = (id: string, v: any): Post | null => {
+const toPost = (id: string, v: any, visibility: Visibility = 'public'): Post | null => {
   if (!v || typeof v !== 'object' || !v.story || typeof v.story.title !== 'string') return null;
   const st = v.story as Story;
   return {
     id,
     creatorUid: v.creatorUid ?? '',
     creatorName: v.creatorName || st.creatorName || 'Reader',
+    creatorUsername: v.creatorUsername || undefined,
     creatorAvatar: v.creatorAvatar || undefined,
     createdAt: v.createdAt ?? 0,
     caption: v.caption || '',
     likeCount: v.likeCount ?? 0,
     featured: v.featured === true,
+    visibility,
     story: {
       ...st,
       genres: st.genres ?? [],
@@ -65,25 +141,46 @@ const toPost = (id: string, v: any): Post | null => {
   };
 };
 
-const toList = (val: Record<string, any> | null): Post[] =>
-  Object.entries(val ?? {}).map(([id, v]) => toPost(id, v)).filter((p): p is Post => !!p).sort((a, b) => b.createdAt - a.createdAt);
+const toList = (val: Record<string, any> | null, visibility: Visibility = 'public'): Post[] =>
+  Object.entries(val ?? {}).map(([id, v]) => toPost(id, v, visibility)).filter((p): p is Post => !!p).sort((a, b) => b.createdAt - a.createdAt);
 
-/** The newest posts, newest first. */
+/** Puts each creator's current name, @username and picture on their posts (a post only stores a copy from the day it was made). */
+async function withCreators(list: Post[]): Promise<Post[]> {
+  const uids = Array.from(new Set(list.map((p) => p.creatorUid).filter(Boolean)));
+  const found = new Map<string, PublicUser>();
+  await Promise.all(uids.map(async (id) => { try { found.set(id, await readUser(id)); } catch {} }));
+  return list.map((p) => {
+    const c = found.get(p.creatorUid);
+    return c ? { ...p, creatorName: c.name, creatorUsername: c.username ?? p.creatorUsername, creatorAvatar: c.avatarUrl ?? p.creatorAvatar } : p;
+  });
+}
+
+/** The newest public posts, newest first. */
 export async function fetchPosts(limit = 30): Promise<Post[]> {
   const snap = await get(query(ref(db(), 'posts'), orderByChild('createdAt'), limitToLast(limit)));
-  return toList(snap.val());
+  return withCreators(toList(snap.val()));
 }
 
+/** A reader's public posts. */
 export async function fetchUserPosts(uid: string): Promise<Post[]> {
   const snap = await get(query(ref(db(), 'posts'), orderByChild('creatorUid'), equalTo(uid)));
-  return toList(snap.val());
+  return withCreators(toList(snap.val()));
 }
 
-export async function createPost(story: Story, caption: string): Promise<Post> {
+/** My private posts. They live under private/<my uid>, which only I can read. */
+export async function fetchMyPrivatePosts(): Promise<Post[]> {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) return [];
+  const snap = await get(ref(db(), `private/${uid}`));
+  return withCreators(toList(snap.val(), 'private'));
+}
+
+export async function createPost(story: Story, caption: string, visibility: Visibility = 'public'): Promise<Post> {
   const u = getAuth().currentUser;
   if (!u) throw new Error('Sign in to post a story.');
   const me = await fetchUser(u.uid);
-  const key = push(ref(db(), 'posts')).key!;
+  const base = visibility === 'private' ? `private/${u.uid}` : 'posts';
+  const key = push(ref(db(), base)).key!;
   const now = Date.now();
   const storyId = `${story.id.replace(/[^a-z0-9-]/gi, '').toLowerCase().slice(0, 40) || 'story'}-${key.slice(-5).toLowerCase()}`;
   const full: Story = {
@@ -91,15 +188,33 @@ export async function createPost(story: Story, caption: string): Promise<Post> {
     createdAt: now, likeCount: 0, playCount: 0,
   };
   const post = {
-    creatorUid: u.uid, creatorName: me.name, creatorAvatar: me.avatarUrl ?? u.photoURL ?? '',
+    creatorUid: u.uid, creatorName: me.name, creatorUsername: me.username ?? '', creatorAvatar: me.avatarUrl ?? u.photoURL ?? '',
     createdAt: now, caption: caption.trim().slice(0, 200), story: full, likeCount: 0, featured: false,
   };
-  await set(ref(db(), `posts/${key}`), clean(post));
-  return toPost(key, post)!;
+  await set(ref(db(), `${base}/${key}`), clean(post));
+  return toPost(key, post, visibility)!;
+}
+
+/** Owner only: moves a post between Public (Community) and Private (only me). Going private also takes it off the Home page. */
+export async function setPostVisibility(post: Post, to: Visibility) {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid || post.creatorUid !== uid) throw new Error('Only the owner can change this.');
+  if ((post.visibility ?? 'public') === to) return;
+  const body = clean({
+    creatorUid: post.creatorUid, creatorName: post.creatorName, creatorUsername: post.creatorUsername ?? '', creatorAvatar: post.creatorAvatar ?? '',
+    createdAt: post.createdAt, caption: post.caption ?? '', story: post.story, likeCount: post.likeCount, featured: false,
+  });
+  const from = to === 'private' ? `posts/${post.id}` : `private/${uid}/${post.id}`;
+  const dest = to === 'private' ? `private/${uid}/${post.id}` : `posts/${post.id}`;
+  await update(ref(db()), { [from]: null, [dest]: body, ...(to === 'private' ? { [`stories/${post.story.id}`]: null } : {}) });
 }
 
 /** Creator or admin removes a post. A story that was on the Home page goes away with it. */
 export async function deletePost(post: Post) {
+  if (post.visibility === 'private') {
+    await update(ref(db()), { [`private/${post.creatorUid}/${post.id}`]: null });
+    return;
+  }
   await update(ref(db()), { [`posts/${post.id}`]: null, [`stories/${post.story.id}`]: null });
 }
 

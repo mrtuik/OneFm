@@ -1,8 +1,9 @@
-import React, { ReactNode, useEffect, useState } from 'react';
+import React, { ReactNode, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
+import { Sheet } from '../components/Sheet';
 import { UserAvatar } from '../components/UserAvatar';
 import { colors, radius, space } from '../theme';
 import { GENDER_LABEL, Gender, LANGS, LANG_LABEL, Lang } from '../types';
@@ -13,8 +14,8 @@ import { PRESETS, Preset, ProviderSettings, testConnection } from '../ai/provide
 import { getApiKey, setApiKey } from '../ai/secure';
 import { VoiceInfo, downloadVoice, getVoiceError, subscribeVoiceError, warmVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
-import { isAdmin } from '../firebase/community';
-import { useNavigation } from '@react-navigation/native';
+import { fetchUser, isAdmin, saveMyGender } from '../firebase/community';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 const SAMPLE: Record<Lang, string> = {
   en: 'Hello, this is how your story will sound.',
@@ -24,15 +25,27 @@ const SAMPLE: Record<Lang, string> = {
 const PRESET_LABEL: Record<Preset, string> = { groq: 'Groq', openrouter: 'OpenRouter', custom: 'Custom' };
 const SIZE_LABEL: Record<TextSize, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+type Panel = 'brain' | 'voice' | 'lang' | 'size' | 'gender' | null;
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <View style={s.card}>
-      <View style={{ gap: 2 }}>
-        <Text style={s.cardTitle}>{title}</Text>
-        {hint ? <Text style={s.hint}>{hint}</Text> : null}
-      </View>
-      {children}
+    <View style={{ gap: 8 }}>
+      <Text style={s.groupTitle}>{title}</Text>
+      <View style={s.group}>{children}</View>
     </View>
+  );
+}
+
+/** One settings row: icon, label, optional value, chevron. A thin divider sits above every row except the first. */
+function Row({ icon, label, value, onPress, first, danger, hot }: { icon: IconName; label: string; value?: string; onPress: () => void; first?: boolean; danger?: boolean; hot?: boolean }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [s.rowItem, !first && s.rowDivider, pressed && { backgroundColor: '#1F1A1A' }]} accessibilityRole="button">
+      <Ionicons name={icon} size={22} color={danger ? colors.accent : colors.text} />
+      <Text style={[s.rowLabel, danger && { color: colors.accent }]} numberOfLines={1}>{label}</Text>
+      {value ? <Text style={[s.rowValue, hot && { color: colors.accent, fontWeight: '700' }]} numberOfLines={1}>{value}</Text> : null}
+      {danger ? null : <Ionicons name="chevron-forward" size={18} color={colors.sub} />}
+    </Pressable>
   );
 }
 
@@ -96,18 +109,23 @@ export default function Profile() {
   const nav = useNavigation<any>();
   const [admin, setAdmin] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [username, setUsername] = useState<string | undefined>();
   const lang = st.language ?? 'bn';
 
   const [prov, setProv] = useState<ProviderSettings>(st.provider);
   const [key, setKey] = useState('');
+  const [hasKey, setHasKey] = useState(false);
   const [testing, setTesting] = useState(false);
 
-  useEffect(() => { getApiKey().then(setKey); }, []);
+  useEffect(() => { getApiKey().then((k) => { setKey(k); setHasKey(!!k); }); }, []);
   useEffect(() => { isAdmin(user?.uid).then(setAdmin); }, [user?.uid]);
+  useEffect(() => { if (user) fetchUser(user.uid).then((u) => setUsername(u.username)); else setUsername(undefined); }, [user?.uid]);
+  useFocusEffect(useCallback(() => { if (user) fetchUser(user.uid).then((u) => setUsername(u.username)); }, [user?.uid]));
   useEffect(() => () => stopSpeaking(), [lang]);
 
   const name = user ? user.displayName ?? user.email ?? 'Reader' : 'Guest';
-  const sub = user ? (user.displayName ? user.email : null) : 'Sign in to like, save and post.';
+  const sub = user ? (username ? `@${username}` : user.email) : 'Sign in to like, save and post.';
 
   const pickPreset = (p: Preset) => setProv(p === 'custom' ? { ...prov, preset: 'custom' } : { ...PRESETS[p] });
   const edit = (patch: Partial<ProviderSettings>) => setProv({ ...prov, ...patch, preset: 'custom' });
@@ -115,6 +133,7 @@ export default function Profile() {
   const saveProvider = async () => {
     update({ provider: prov });
     await setApiKey(key);
+    setHasKey(!!key.trim());
   };
   const test = async () => {
     setTesting(true);
@@ -135,102 +154,140 @@ export default function Profile() {
   };
 
   const chosen = resolveVoice(lang, st.voices[lang]).id;
+  const voiceName = resolveVoice(lang, st.voices[lang]).name;
+  const closePanel = () => { stopSpeaking(); setPanel(null); };
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      contentContainerStyle={{ padding: space.screen, gap: space.gap, paddingBottom: insets.bottom + space.section }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={s.identity}>
-        <UserAvatar user={user} size={88} active />
-        <Text style={s.name}>{name}</Text>
-        {sub ? <Text style={s.sub}>{sub}</Text> : null}
-      </View>
-
-      {user ? <OutlineButton title="My public profile and stories" icon="person-circle-outline" onPress={() => nav.navigate('UserProfile', { uid: user.uid })} /> : null}
-
-      <Section title="Reading language" hint="Stories are shown in this language.">
-        <View style={s.row}>
-          {LANGS.map((l) => <Chip key={l} label={LANG_LABEL[l]} active={l === lang} onPress={() => update({ language: l })} />)}
-        </View>
-      </Section>
-
-      <Section title="I am" hint="You play roles that match you. A male reader plays male roles, a female reader plays female roles.">
-        <View style={s.row}>
-          {(['male', 'female'] as Gender[]).map((g) => <Chip key={g} label={GENDER_LABEL[g]} active={st.gender === g} onPress={() => update({ gender: g })} />)}
-        </View>
-      </Section>
-
-      <Section title="Voice" hint={`${LANG_LABEL[lang]} voices run on this phone with sherpa-onnx. Download one once, then it works offline.`}>
-        <View style={{ gap: 8 }}>
-          {voicesFor(lang).map((v) => (
-            <VoiceRow key={v.id} v={v} lang={lang} chosen={chosen === v.id} onUse={() => update({ voices: { ...st.voices, [lang]: v.id } })} />
-          ))}
-        </View>
-        <View style={s.switchRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.cardTitle}>Auto-play voice</Text>
-            <Text style={s.hint}>Play each reply as soon as it arrives.</Text>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        contentContainerStyle={{ padding: space.screen, gap: space.section - 4, paddingBottom: insets.bottom + space.section }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={s.card}>
+          <UserAvatar user={user} size={60} active />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={s.name} numberOfLines={1}>{name}</Text>
+            {sub ? <Text style={s.sub} numberOfLines={1}>{sub}</Text> : null}
+            {user ? (
+              <Pressable onPress={() => nav.navigate('EditProfile')} hitSlop={8} style={s.editLink}>
+                <Ionicons name="pencil" size={13} color={colors.accent} />
+                <Text style={s.editText}>Edit profile</Text>
+              </Pressable>
+            ) : null}
           </View>
-          <Switch value={st.autoPlay} onValueChange={(v) => update({ autoPlay: v })} trackColor={{ true: colors.accent, false: colors.line }} thumbColor={colors.text} />
         </View>
-      </Section>
 
-      <Section title="AI provider" hint="Your key stays on this phone in secure storage. It is never sent to Firebase.">
-        <View style={s.row}>
-          {(['groq', 'openrouter', 'custom'] as Preset[]).map((p) => <Chip key={p} label={PRESET_LABEL[p]} active={prov.preset === p} onPress={() => pickPreset(p)} />)}
+        <Group title="Account">
+          {user ? <Row first icon="person-circle-outline" label="My public profile" onPress={() => nav.navigate('UserProfile', { uid: user.uid })} /> : null}
+          <Row first={!user} icon="male-female-outline" label="I am" value={st.gender ? GENDER_LABEL[st.gender] : 'Not set'} hot={!st.gender} onPress={() => setPanel('gender')} />
+        </Group>
+
+        <Group title="Story setup">
+          <Row first icon="sparkles-outline" label="AI brain" value={hasKey ? PRESET_LABEL[st.provider.preset] : 'Set your brain setup'} hot={!hasKey} onPress={() => setPanel('brain')} />
+          <Row icon="mic-outline" label="Voice" value={voiceName} onPress={() => setPanel('voice')} />
+        </Group>
+
+        <Group title="General">
+          <Row first icon="language-outline" label="Reading language" value={LANG_LABEL[lang]} onPress={() => setPanel('lang')} />
+          <Row icon="text-outline" label="Text size" value={SIZE_LABEL[st.textSize]} onPress={() => setPanel('size')} />
+        </Group>
+
+        {admin ? (
+          <Group title="Developer">
+            <Row first icon="library-outline" label="Story brain (novels and lessons)" onPress={() => nav.navigate('Brain')} />
+            <Row icon="cloud-upload-outline" label={busy ? 'Seeding...' : 'Seed sample stories'} onPress={seed} />
+          </Group>
+        ) : null}
+
+        <View style={s.group}>
+          {user ? (
+            <Row first danger icon="log-out-outline" label="Log out" onPress={async () => { await logout(); update({ guest: false }); }} />
+          ) : (
+            <Row first icon="log-in-outline" label="Sign in" onPress={() => update({ guest: false })} />
+          )}
         </View>
-        <Field label="Base URL" value={prov.baseUrl} onChangeText={(v) => edit({ baseUrl: v })} keyboardType="url" />
-        <Field label="Chat model" value={prov.model} onChangeText={(v) => edit({ model: v })} />
-        <Field label="Summary model (cheaper)" value={prov.summaryModel} onChangeText={(v) => edit({ summaryModel: v })} />
-        <Field label="API key" value={key} onChangeText={setKey} secureTextEntry placeholder="Paste your API key" />
-        <View style={{ gap: 8 }}>
-          <GradientButton title="Save provider" onPress={async () => { await saveProvider(); Alert.alert('Saved', 'Your AI provider settings were saved.'); }} />
-          <OutlineButton title={testing ? 'Testing...' : 'Test connection'} onPress={test} />
+      </ScrollView>
+
+      <Sheet form visible={panel === 'brain'} onClose={closePanel} title="AI brain">
+        <View style={{ gap: 12 }}>
+          <Text style={s.hint}>Your key stays on this phone in secure storage. It is never sent to Firebase.</Text>
+          <View style={s.chipRow}>
+            {(['groq', 'openrouter', 'custom'] as Preset[]).map((p) => <Chip key={p} label={PRESET_LABEL[p]} active={prov.preset === p} onPress={() => pickPreset(p)} />)}
+          </View>
+          <Field label="API key" value={key} onChangeText={setKey} secureTextEntry placeholder="Paste your API key" />
+          <Field label="Base URL" value={prov.baseUrl} onChangeText={(v) => edit({ baseUrl: v })} keyboardType="url" />
+          <Field label="Chat model" value={prov.model} onChangeText={(v) => edit({ model: v })} />
+          <Field label="Summary model (cheaper)" value={prov.summaryModel} onChangeText={(v) => edit({ summaryModel: v })} />
+          <View style={{ gap: 8, marginTop: 4 }}>
+            <GradientButton title="Save" onPress={async () => { await saveProvider(); setPanel(null); }} />
+            <OutlineButton title={testing ? 'Testing...' : 'Save and test connection'} onPress={test} />
+          </View>
         </View>
-      </Section>
+      </Sheet>
 
-      <Section title="Reading">
-        <Text style={s.fieldLabel}>Text size</Text>
-        <View style={s.row}>
-          {(['small', 'medium', 'large'] as TextSize[]).map((z) => <Chip key={z} label={SIZE_LABEL[z]} active={st.textSize === z} onPress={() => update({ textSize: z })} />)}
+      <Sheet form visible={panel === 'voice'} onClose={closePanel} title="Voice">
+        <View style={{ gap: 12 }}>
+          <Text style={s.hint}>{`${LANG_LABEL[lang]} voices run on this phone with sherpa-onnx. Download one once, then it works offline.`}</Text>
+          <View style={{ gap: 8 }}>
+            {voicesFor(lang).map((v) => (
+              <VoiceRow key={v.id} v={v} lang={lang} chosen={chosen === v.id} onUse={() => update({ voices: { ...st.voices, [lang]: v.id } })} />
+            ))}
+          </View>
+          <View style={s.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.switchTitle}>Auto-play voice</Text>
+              <Text style={s.hint}>Play each reply as soon as it arrives.</Text>
+            </View>
+            <Switch value={st.autoPlay} onValueChange={(v) => update({ autoPlay: v })} trackColor={{ true: colors.accent, false: colors.line }} thumbColor={colors.text} />
+          </View>
         </View>
-      </Section>
+      </Sheet>
 
-      {admin ? (
-        <Section title="Developer">
-          <OutlineButton title="Story brain (novels and lessons)" icon="sparkles-outline" onPress={() => nav.navigate('Brain')} />
-          <OutlineButton title={busy ? 'Seeding...' : 'Seed sample stories to database'} onPress={seed} />
-        </Section>
-      ) : null}
+      <Sheet form visible={panel === 'lang'} onClose={closePanel} title="Reading language">
+        <Text style={[s.hint, { marginBottom: 12 }]}>Stories are shown in this language.</Text>
+        <View style={s.chipRow}>
+          {LANGS.map((l) => <Chip key={l} label={LANG_LABEL[l]} active={l === lang} onPress={() => { update({ language: l }); setPanel(null); }} />)}
+        </View>
+      </Sheet>
 
-      <View style={{ marginTop: space.gap }}>
-        {user ? (
-          <OutlineButton title="Log out" onPress={async () => { await logout(); update({ guest: false }); }} />
-        ) : (
-          <GradientButton title="Sign in" onPress={() => update({ guest: false })} />
-        )}
-      </View>
-    </ScrollView>
+      <Sheet form visible={panel === 'size'} onClose={closePanel} title="Text size">
+        <View style={s.chipRow}>
+          {(['small', 'medium', 'large'] as TextSize[]).map((z) => <Chip key={z} label={SIZE_LABEL[z]} active={st.textSize === z} onPress={() => { update({ textSize: z }); setPanel(null); }} />)}
+        </View>
+      </Sheet>
+
+      <Sheet form visible={panel === 'gender'} onClose={closePanel} title="I am">
+        <Text style={[s.hint, { marginBottom: 12 }]}>You play roles that match you. A male reader plays male roles, a female reader plays female roles.</Text>
+        <View style={s.chipRow}>
+          {(['male', 'female'] as Gender[]).map((g) => <Chip key={g} label={GENDER_LABEL[g]} active={st.gender === g} onPress={() => { update({ gender: g }); saveMyGender(g); setPanel(null); }} />)}
+        </View>
+      </Sheet>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  identity: { alignItems: 'center', gap: 6, paddingVertical: space.section },
-  name: { color: colors.text, fontSize: 22, fontWeight: '800', marginTop: 8 },
-  sub: { color: colors.sub, fontSize: 14 },
-  card: { padding: space.card, borderRadius: radius.card, backgroundColor: colors.surface, gap: space.gap },
-  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: space.card, borderRadius: radius.card, backgroundColor: colors.surface },
+  name: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  sub: { color: colors.sub, fontSize: 13 },
+  editLink: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, alignSelf: 'flex-start' },
+  editText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  groupTitle: { color: colors.sub, fontSize: 14, fontWeight: '600', paddingHorizontal: 4 },
+  group: { borderRadius: radius.card, backgroundColor: colors.surface, overflow: 'hidden' },
+  rowItem: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 54, paddingHorizontal: space.card },
+  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  rowLabel: { flex: 1, color: colors.text, fontSize: 16, fontWeight: '600' },
+  rowValue: { color: colors.sub, fontSize: 15, maxWidth: '45%' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   hint: { color: colors.sub, fontSize: 13, lineHeight: 18 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, marginTop: 4 },
+  switchTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   fieldLabel: { color: colors.sub, fontSize: 13, fontWeight: '600' },
-  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, padding: 12, borderRadius: radius.btn, backgroundColor: '#1F1A1A' },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: space.gap, padding: 12, borderRadius: radius.btn, backgroundColor: colors.surface },
   voiceMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   voiceName: { color: colors.text, fontSize: 15, fontWeight: '600' },
   voiceActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   dl: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.chip, backgroundColor: colors.accentSoft },
   dlText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
-  input: { height: 46, borderRadius: radius.btn, backgroundColor: colors.bg, paddingHorizontal: 14, color: colors.text, fontSize: 15 },
+  input: { height: 46, borderRadius: radius.btn, backgroundColor: colors.surface, paddingHorizontal: 14, color: colors.text, fontSize: 15 },
 });

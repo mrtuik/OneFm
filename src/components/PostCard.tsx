@@ -44,7 +44,7 @@ export function PostCard({ post, liked, onOpen, onOpenUser, onLike, onMenu }: Pr
           <Avatar name={post.creatorName} url={post.creatorAvatar} size={34} />
           <View style={{ flexShrink: 1 }}>
             <Text style={s.name} numberOfLines={1}>{post.creatorName}</Text>
-            <Text style={s.time}>{timeAgo(post.createdAt)}{post.featured ? '  ·  on Home' : ''}</Text>
+            <Text style={s.time} numberOfLines={1}>{post.creatorUsername ? `@${post.creatorUsername}  ·  ` : ''}{timeAgo(post.createdAt)}{post.featured ? '  ·  on Home' : ''}</Text>
           </View>
         </Pressable>
         <Pressable onPress={onMenu} hitSlop={10} accessibilityLabel="Post options"><Ionicons name="ellipsis-horizontal" size={20} color={colors.sub} /></Pressable>

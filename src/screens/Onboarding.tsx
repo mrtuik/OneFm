@@ -5,9 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Logo } from '../components/Logo';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
 import { colors, radius, space } from '../theme';
-import { LANGS, LANG_LABEL, Lang } from '../types';
+import { GENDER_LABEL, Gender, LANGS, LANG_LABEL, Lang } from '../types';
 import { useSettings } from '../state/settings';
 import { emailSignIn, emailSignUp, friendlyAuthError, googleSignIn } from '../firebase/auth';
+import { saveMyGender } from '../firebase/community';
 
 function Frame({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
@@ -100,6 +101,26 @@ export function LanguageScreen() {
           </View>
         </View>
         <GradientButton title="Continue" onPress={() => update({ language: lang })} />
+      </View>
+    </Frame>
+  );
+}
+
+/** Shown once, right after the first login: who the reader is decides which story roles they can play. */
+export function GenderScreen() {
+  const { update } = useSettings();
+  const [g, setG] = useState<Gender | null>(null);
+  return (
+    <Frame>
+      <Hero line="Who are you? You play roles that match you. A male reader plays male roles, a female reader plays female roles." />
+      <View style={{ flex: 1, justifyContent: 'flex-end', gap: 20 }}>
+        <View style={{ gap: 10 }}>
+          <Text style={s.label}>I am</Text>
+          <View style={s.row}>
+            {(['male', 'female'] as Gender[]).map((x) => <Chip key={x} label={GENDER_LABEL[x]} active={g === x} onPress={() => setG(x)} />)}
+          </View>
+        </View>
+        <GradientButton title="Continue" disabled={!g} onPress={() => { if (!g) return; update({ gender: g }); saveMyGender(g); }} />
       </View>
     </Frame>
   );

@@ -105,6 +105,8 @@ export interface Post {
   id: string;
   creatorUid: string;
   creatorName: string;
+  /** Unique @username of the creator. Filled from the creator's profile when posts are loaded. */
+  creatorUsername?: string;
   creatorAvatar?: string;
   createdAt: number;
   caption?: string;
@@ -112,4 +114,7 @@ export interface Post {
   likeCount: number;
   /** True when the admin put the story on the Home page. */
   featured?: boolean;
+  /** Public posts show in Community. Private posts are kept under private/<uid> and only the owner sees them. */
+  visibility?: Visibility;
 }
+export type Visibility = 'public' | 'private';

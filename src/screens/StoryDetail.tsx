@@ -27,7 +27,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function StoryDetail() {
-  const { story, postId } = useRoute<any>().params as { story: Story; postId?: string };
+  const { story, postId, isPrivate } = useRoute<any>().params as { story: Story; postId?: string; isPrivate?: boolean };
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('episodes');
@@ -36,7 +36,7 @@ export default function StoryDetail() {
   const [likes, setLikes] = useState(story.likeCount);
 
   useFocusEffect(useCallback(() => { loadChat(story.id).then(setChat); }, [story.id]));
-  useEffect(() => { (postId ? isPostLiked(postId) : isLiked(story.id)).then(setLikedState); }, [story.id, postId]);
+  useEffect(() => { if (isPrivate) return; (postId ? isPostLiked(postId) : isLiked(story.id)).then(setLikedState); }, [story.id, postId, isPrivate]);
 
   const started = !!chat && chat.messages.length > 0;
   const currentEp = started ? chat!.ep : 1;
@@ -65,10 +65,17 @@ export default function StoryDetail() {
             <View style={s.ribbon}><Text style={s.ribbonText}>{compact(story.playCount)} PLAYS</Text></View>
           </Cover>
           <View style={s.actions}>
-            <Pressable onPress={toggleLike} style={[s.btn, s.btnLight]} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
-              <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? colors.accent : '#1A0F0F'} />
-              <Text style={s.btnLightText}>{liked ? 'Liked' : 'Like'}</Text>
-            </Pressable>
+            {isPrivate ? (
+              <View style={[s.btn, s.btnLight]}>
+                <Ionicons name="lock-closed" size={16} color="#1A0F0F" />
+                <Text style={s.btnLightText}>Private</Text>
+              </View>
+            ) : (
+              <Pressable onPress={toggleLike} style={[s.btn, s.btnLight]} accessibilityLabel={liked ? 'Unlike' : 'Like'}>
+                <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? colors.accent : '#1A0F0F'} />
+                <Text style={s.btnLightText}>{liked ? 'Liked' : 'Like'}</Text>
+              </Pressable>
+            )}
             <Pressable onPress={play} style={[s.btn, { backgroundColor: colors.accent }]}>
               <Ionicons name="play" size={16} color={colors.onAccent} />
               <Text style={s.btnText}>{started ? `Continue Ep ${currentEp}` : 'Play Now'}</Text>

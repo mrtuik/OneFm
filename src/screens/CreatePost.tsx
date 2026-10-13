@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StoryCard } from '../components/StoryCard';
 import { Chip, GradientButton } from '../components/Ui';
 import { colors, radius, space } from '../theme';
-import { GENRES, LANGS, LANG_LABEL, Lang } from '../types';
+import { GENRES, LANGS, LANG_LABEL, Lang, Visibility } from '../types';
 import { useSettings } from '../state/settings';
 import { Checked, checkStory, createPost, parseStoryText } from '../firebase/community';
 
@@ -44,6 +44,7 @@ export default function CreatePost() {
   const [eps, setEps] = useState('');
   const [caption, setCaption] = useState('');
   const [image, setImage] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<Visibility>('public');
   const [agree, setAgree] = useState(false);
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -75,7 +76,7 @@ export default function CreatePost() {
     if (!agree) { Alert.alert('One more thing', 'Please confirm the story is yours (or public domain).'); return; }
     setBusy(true);
     try {
-      await createPost({ ...checked.story, image: image ?? undefined }, caption);
+      await createPost({ ...checked.story, image: image ?? undefined }, caption, visibility);
       nav.goBack();
     } catch (e: any) {
       Alert.alert('Could not post', String(e?.message ?? e));
@@ -129,6 +130,11 @@ export default function CreatePost() {
             <Text style={s.pickText}>Choose from gallery</Text>
           </Pressable>
         )}
+        <Text style={s.label}>Who can see it</Text>
+        <View style={s.row}>
+          <Chip label="Public (Community)" active={visibility === 'public'} onPress={() => setVisibility('public')} />
+          <Chip label="Private (only me)" active={visibility === 'private'} onPress={() => setVisibility('private')} />
+        </View>
         <Text style={s.label}>Say something about it (optional)</Text>
         <TextInput style={s.input} value={caption} onChangeText={setCaption} maxLength={200} placeholder="A short note for readers" placeholderTextColor={colors.sub} />
       </View>
@@ -153,7 +159,7 @@ export default function CreatePost() {
         <Text style={s.agreeText}>I wrote this story, or it is public domain. It is not copied from a book, film or app, and it has no sexual or abusive content.</Text>
       </Pressable>
 
-      {busy ? <ActivityIndicator color={colors.accent} /> : <GradientButton title="Post story" onPress={post} />}
+      {busy ? <ActivityIndicator color={colors.accent} /> : <GradientButton title={visibility === 'private' ? 'Save privately' : 'Post story'} onPress={post} />}
     </ScrollView>
   );
 }

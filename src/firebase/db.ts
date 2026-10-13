@@ -3,6 +3,7 @@ import { getAuth } from '@react-native-firebase/auth';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { Story } from '../types';
 import { SAMPLE_STORIES } from '../data/samples';
+import { ensureUsername } from './community';
 
 const norm = (s: Story): Story => ({
   ...s,
@@ -43,14 +44,17 @@ export async function ensureUserProfile(u: FirebaseAuthTypes.User) {
   try {
     const r = ref(getDatabase(), `users/${u.uid}`);
     const snap = await get(r);
-    if (snap.exists()) return;
-    await set(r, {
-      name: u.displayName ?? u.email?.split('@')[0] ?? 'Reader',
-      avatarUrl: u.photoURL ?? '',
-      bio: '',
-      role: 'user',
-      createdAt: Date.now(),
-    });
+    if (!snap.exists()) {
+      await set(r, {
+        name: u.displayName ?? u.email?.split('@')[0] ?? 'Reader',
+        avatarUrl: u.photoURL ?? '',
+        bio: '',
+        role: 'user',
+        createdAt: Date.now(),
+      });
+    }
+    // Every reader gets a unique @username (new readers, and old ones who have none yet). They can change it in Edit profile.
+    if (!snap.exists() || !snap.val()?.username) await ensureUsername(u.uid, u.email?.split('@')[0] ?? u.displayName ?? 'reader');
   } catch {}
 }
 

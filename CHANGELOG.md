@@ -1,5 +1,13 @@
 # One Fm changelog
 
+## V6.9.15
+- Profile is now a settings list: profile card (Edit profile), grouped rows with icons, value and chevron. "AI brain" shows "Set your brain setup" until a key is saved; tapping it opens a bottom sheet (provider, API key, models, Save / test). Voice, Reading language, Text size and "I am" open bottom sheets too.
+- Gender is asked once after the first login (and saved on the profile, so a new phone does not ask again). Guests choose it locally.
+- Edit profile screen: name, unique @username (live check, claimed with a transaction), bio, gender. Saved to Firebase. Every reader gets a starting @username from their email.
+- Posts show @username under the creator's name. Names and usernames are taken from the creator's current profile.
+- Public / Private: on your own profile there are two tabs. Private stories are stored under `private/<uid>` (only you can read them). Choose Public or Private when posting, or press and hold a story to switch it.
+- database.rules.locked.json: added `usernames` and `private`.
+
 ## V6.9.13
 - google-services.json replaced with the new one that has the Android client (type 1) with your SHA-1. Google Sign-In needs this.
 
