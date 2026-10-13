@@ -7,17 +7,13 @@ const db = () => getDatabase();
 const clean = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 
 // ---------- admin ----------
-// An admin is a user whose id is listed in the database at config/admins/<uid> = true (set it in the Firebase console).
-const adminCache: Record<string, boolean> = {};
+// The only admin is the owner account below. Admin status is decided by the signed-in email, nothing is shown in Profile for anyone else.
+const ADMIN_EMAILS = ['xrdk95@gmail.com'];
 export async function isAdmin(uid?: string | null): Promise<boolean> {
   if (!uid) return false;
-  if (uid in adminCache) return adminCache[uid];
-  try {
-    adminCache[uid] = (await get(ref(db(), `config/admins/${uid}`))).val() === true;
-  } catch {
-    adminCache[uid] = false;
-  }
-  return adminCache[uid];
+  const u = getAuth().currentUser;
+  if (!u || u.uid !== uid) return false;
+  return !!u.email && u.emailVerified !== false && ADMIN_EMAILS.includes(u.email.toLowerCase());
 }
 
 // ---------- users ----------

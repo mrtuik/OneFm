@@ -14,7 +14,6 @@ import { getApiKey, setApiKey } from '../ai/secure';
 import { VoiceInfo, downloadVoice, getVoiceError, subscribeVoiceError, warmVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
 import { isAdmin } from '../firebase/community';
-import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
 
 const SAMPLE: Record<Lang, string> = {
@@ -199,16 +198,12 @@ export default function Profile() {
         </View>
       </Section>
 
-      <Section title="Developer">
-        {admin ? <OutlineButton title="Story brain (novels and lessons)" icon="sparkles-outline" onPress={() => nav.navigate('Brain')} /> : null}
-        <OutlineButton title={busy ? 'Seeding...' : 'Seed sample stories to database'} onPress={seed} />
-        {user ? (
-          <View style={{ gap: 6 }}>
-            <Text style={s.hint}>{admin ? 'You are an admin.' : 'To become admin, add this id in the Firebase console at config/admins/<id> = true.'}</Text>
-            <OutlineButton title={`Copy my user id (${user.uid.slice(0, 6)}...)`} icon="copy-outline" onPress={async () => { await Clipboard.setStringAsync(user.uid); Alert.alert('Copied', 'Your user id is on the clipboard.'); }} />
-          </View>
-        ) : null}
-      </Section>
+      {admin ? (
+        <Section title="Developer">
+          <OutlineButton title="Story brain (novels and lessons)" icon="sparkles-outline" onPress={() => nav.navigate('Brain')} />
+          <OutlineButton title={busy ? 'Seeding...' : 'Seed sample stories to database'} onPress={seed} />
+        </Section>
+      ) : null}
 
       <View style={{ marginTop: space.gap }}>
         {user ? (

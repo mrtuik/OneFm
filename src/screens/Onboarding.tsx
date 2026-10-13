@@ -71,8 +71,8 @@ export function LoginScreen() {
         {err ? <Text style={s.err}>{err}</Text> : null}
         {busy ? <ActivityIndicator color={colors.accent} style={{ height: 52 }} /> : (
           <>
-            <GradientButton title="Sign in" onPress={() => run(() => emailSignIn(email, pw))} />
-            <OutlineButton title="Create account" onPress={() => run(() => emailSignUp(email, pw))} />
+            <GradientButton logo title="Sign in" onPress={() => run(() => emailSignIn(email, pw))} />
+            <OutlineButton logo title="Create account" onPress={() => run(() => emailSignUp(email, pw))} />
             <OutlineButton icon="logo-google" title="Continue with Google" onPress={() => run(googleSignIn)} />
           </>
         )}

@@ -2,22 +2,26 @@ import React, { ComponentProps, ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '../theme';
+import { Logo } from './Logo';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
-export function GradientButton({ title, onPress, disabled, style }: { title: string; onPress: () => void; disabled?: boolean; style?: ViewStyle }) {
+export function GradientButton({ title, onPress, disabled, style, logo }: { title: string; onPress: () => void; disabled?: boolean; style?: ViewStyle; logo?: boolean }) {
   return (
     <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [s.btn, disabled ? s.btnDisabled : { opacity: pressed ? 0.85 : 1 }, style]}>
-      <Text style={[s.btnText, disabled && { color: colors.sub }]}>{title}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        {logo ? <Logo size={20} /> : null}
+        <Text style={[s.btnText, disabled && { color: colors.sub }]}>{title}</Text>
+      </View>
     </Pressable>
   );
 }
 
 /** Soft filled button (no outline). */
-export function OutlineButton({ title, onPress, style, icon }: { title: string; onPress: () => void; style?: ViewStyle; icon?: IconName }) {
+export function OutlineButton({ title, onPress, style, icon, logo }: { title: string; onPress: () => void; style?: ViewStyle; icon?: IconName; logo?: boolean }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [s.outline, pressed && { backgroundColor: '#1F1A1A' }, style]}>
-      {icon ? <Ionicons name={icon} size={20} color={colors.text} /> : null}
+      {logo ? <Logo size={20} /> : icon ? <Ionicons name={icon} size={20} color={colors.text} /> : null}
       <Text style={s.outlineText}>{title}</Text>
     </Pressable>
   );
