@@ -23,11 +23,20 @@ export const SearchIcon = ({ size = 26, color }: IconProps) => (
   </Svg>
 );
 
-export const ChatIcon = ({ size = 26, color }: IconProps) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24">
-    <Path
-      fill={color}
-      d="m20.34 9.32l-14-7a3 3 0 0 0-4.08 3.9l2.4 5.37a1.06 1.06 0 0 1 0 .82l-2.4 5.37A3 3 0 0 0 5 22a3.14 3.14 0 0 0 1.35-.32l14-7a3 3 0 0 0 0-5.36Zm-.89 3.57l-14 7a1 1 0 0 1-1.35-1.3l2.39-5.37a2 2 0 0 0 .08-.22h6.89a1 1 0 0 0 0-2H6.57a2 2 0 0 0-.08-.22L4.1 5.41a1 1 0 0 1 1.35-1.3l14 7a1 1 0 0 1 0 1.78"
-    />
+/** Chat bubble with a smile. The smile is cut out with the bar color so the icon follows the tab color. */
+export const ChatIcon = ({ size = 26, color, cut = '#0A0A0A' }: IconProps & { cut?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 512 512">
+    <Path fill={color} d="M140 22H372C448 22 512 82 512 160V285C512 362 448 422 372 422H150C138 422 126 427 116 435L52 484C30 500 0 490 0 462V150C0 80 62 22 140 22Z" />
+    <Path d="M178 204Q258 300 338 204" stroke={cut} strokeWidth={36} strokeLinecap="round" fill="none" />
+  </Svg>
+);
+
+
+/** Three cards in a row (one big, two smaller). Used for the AI brain row. */
+export const CardsIcon = ({ size = 24, color }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 512 512">
+    <Path fill={color} d="M38 0H239Q277 0 277 38V474Q277 512 239 512H38Q0 512 0 474V38Q0 0 38 0Z" />
+    <Path fill={color} d="M325 74Q325 58 340 62L378 78Q397 86 397 106V406Q397 426 378 434L340 450Q325 456 325 440Z" />
+    <Path fill={color} d="M444 131Q444 115 459 119L497 135Q512 143 512 163V349Q512 369 497 377L459 393Q444 399 444 383Z" />
   </Svg>
 );

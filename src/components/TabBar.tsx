@@ -7,7 +7,7 @@ import { UserAvatar } from './UserAvatar';
 import { colors, TAB_BAR_HEIGHT } from '../theme';
 import type { User } from '../firebase/auth';
 
-const ICON = 22;
+const ICON = 26;
 
 export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: User | null }) {
   const insets = useSafeAreaInsets();
@@ -23,10 +23,10 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
         let icon: React.ReactNode;
         if (route.name === 'Home') icon = <HomeIcon size={ICON} color={color} />;
         else if (route.name === 'Search') icon = <SearchIcon size={ICON} color={color} />;
-        else if (route.name === 'Chats') icon = <ChatIcon size={ICON} color={color} />;
+        else if (route.name === 'Chats') icon = <ChatIcon size={ICON} color={color} cut={colors.bg} />;
         else icon = (
           <View style={s.ring}>
-            <UserAvatar user={user} size={22} active={focused} />
+            <UserAvatar user={user} size={26} active={focused} />
           </View>
         );
         return (
@@ -40,7 +40,6 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
             style={s.item}
           >
             <View style={s.iconBox}>{icon}</View>
-            <Text style={[s.label, { color }, focused && { fontWeight: '800' }]}>{route.name}</Text>
           </Pressable>
         );
       })}
@@ -49,9 +48,8 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
 }
 
 const s = StyleSheet.create({
-  bar: { flexDirection: 'row', backgroundColor: colors.bg, paddingTop: 16 },
-  item: { flex: 1, alignItems: 'center', gap: 4 },
-  iconBox: { height: 28, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 10, fontWeight: '600' },
-  ring: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  bar: { flexDirection: 'row', backgroundColor: colors.bg, paddingTop: 14 },
+  item: { flex: 1, alignItems: 'center' },
+  iconBox: { height: 32, alignItems: 'center', justifyContent: 'center' },
+  ring: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
 });

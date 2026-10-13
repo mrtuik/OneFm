@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip, GradientButton, OutlineButton } from '../components/Ui';
 import { Sheet } from '../components/Sheet';
+import { CardsIcon } from '../components/Icons';
 import { UserAvatar } from '../components/UserAvatar';
 import { colors, radius, space } from '../theme';
 import { GENDER_LABEL, Gender, LANGS, LANG_LABEL, Lang } from '../types';
@@ -38,10 +39,10 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** One settings row: icon, label, optional value, chevron. A thin divider sits above every row except the first. */
-function Row({ icon, label, value, onPress, first, danger, hot }: { icon: IconName; label: string; value?: string; onPress: () => void; first?: boolean; danger?: boolean; hot?: boolean }) {
+function Row({ icon, node, label, value, onPress, first, danger, hot }: { icon?: IconName; node?: ReactNode; label: string; value?: string; onPress: () => void; first?: boolean; danger?: boolean; hot?: boolean }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [s.rowItem, !first && s.rowDivider, pressed && { backgroundColor: '#1F1A1A' }]} accessibilityRole="button">
-      <Ionicons name={icon} size={22} color={danger ? colors.accent : colors.text} />
+      {node ?? (icon ? <Ionicons name={icon} size={22} color={danger ? colors.accent : colors.text} /> : null)}
       <Text style={[s.rowLabel, danger && { color: colors.accent }]} numberOfLines={1}>{label}</Text>
       {value ? <Text style={[s.rowValue, hot && { color: colors.accent, fontWeight: '700' }]} numberOfLines={1}>{value}</Text> : null}
       {danger ? null : <Ionicons name="chevron-forward" size={18} color={colors.sub} />}
@@ -163,27 +164,27 @@ export default function Profile() {
         contentContainerStyle={{ padding: space.screen, gap: space.section - 4, paddingBottom: insets.bottom + space.section }}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={s.card}>
+        <Pressable
+          onPress={user ? () => nav.navigate('UserProfile', { uid: user.uid }) : undefined}
+          disabled={!user}
+          style={({ pressed }) => [s.card, pressed && { backgroundColor: '#1F1A1A' }]}
+          accessibilityRole="button"
+          accessibilityLabel="Open my profile"
+        >
           <UserAvatar user={user} size={60} active />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={s.name} numberOfLines={1}>{name}</Text>
             {sub ? <Text style={s.sub} numberOfLines={1}>{sub}</Text> : null}
-            {user ? (
-              <Pressable onPress={() => nav.navigate('EditProfile')} hitSlop={8} style={s.editLink}>
-                <Ionicons name="pencil" size={13} color={colors.accent} />
-                <Text style={s.editText}>Edit profile</Text>
-              </Pressable>
-            ) : null}
           </View>
-        </View>
+          {user ? <Ionicons name="chevron-forward" size={18} color={colors.sub} /> : null}
+        </Pressable>
 
         <Group title="Account">
-          {user ? <Row first icon="person-circle-outline" label="My public profile" onPress={() => nav.navigate('UserProfile', { uid: user.uid })} /> : null}
-          <Row first={!user} icon="male-female-outline" label="I am" value={st.gender ? GENDER_LABEL[st.gender] : 'Not set'} hot={!st.gender} onPress={() => setPanel('gender')} />
+          <Row first icon="male-female-outline" label="I am" value={st.gender ? GENDER_LABEL[st.gender] : 'Not set'} hot={!st.gender} onPress={() => setPanel('gender')} />
         </Group>
 
         <Group title="Story setup">
-          <Row first icon="sparkles-outline" label="AI brain" value={hasKey ? PRESET_LABEL[st.provider.preset] : 'Set your brain setup'} hot={!hasKey} onPress={() => setPanel('brain')} />
+          <Row first node={<CardsIcon size={22} color={colors.text} />} label="AI brain" value={hasKey ? PRESET_LABEL[st.provider.preset] : 'Set your brain setup'} hot={!hasKey} onPress={() => setPanel('brain')} />
           <Row icon="mic-outline" label="Voice" value={voiceName} onPress={() => setPanel('voice')} />
         </Group>
 
@@ -270,8 +271,6 @@ const s = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: space.card, borderRadius: radius.card, backgroundColor: colors.surface },
   name: { color: colors.text, fontSize: 18, fontWeight: '800' },
   sub: { color: colors.sub, fontSize: 13 },
-  editLink: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, alignSelf: 'flex-start' },
-  editText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
   groupTitle: { color: colors.sub, fontSize: 14, fontWeight: '600', paddingHorizontal: 4 },
   group: { borderRadius: radius.card, backgroundColor: colors.surface, overflow: 'hidden' },
   rowItem: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 54, paddingHorizontal: space.card },

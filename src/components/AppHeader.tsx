@@ -10,7 +10,7 @@ export function AppHeader() {
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   return (
-    <View style={[s.bar, { paddingTop: insets.top + 8 }]}>
+    <View style={[s.bar, { paddingTop: insets.top + 16 }]}>
       <Pressable onPress={() => nav.navigate('Profile')} style={s.avatar} hitSlop={8}>
         <Ionicons name="person-outline" size={20} color={colors.text} />
       </Pressable>
@@ -26,7 +26,7 @@ export function AppHeader() {
 }
 
 const s = StyleSheet.create({
-  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 10, backgroundColor: colors.bg },
+  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 14, backgroundColor: colors.bg },
   avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   lib: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   center: { flexDirection: 'row', alignItems: 'center', gap: 10 },

@@ -1,5 +1,21 @@
 # One Fm changelog
 
+## V6.9.18
+- Profile page redesigned, black theme: a card with a banner, avatar on the banner edge, name, @username, bio, three numbers (Stories, Likes, Plays) and one big button (Post a story on my own profile, Share profile on others). Under it an Instagram style 3 column grid of story covers with Public / Private tabs on my own profile.
+- Settings: the profile card is now the way in. Tap it to open your profile. The separate "My public profile" row and the "Edit profile" link are gone. Edit profile and a Settings button are on the profile page.
+- AI brain row has the new three-card icon.
+
+## V6.9.17
+- Chats tab icon is now the chat bubble with a smile (drawn with react-native-svg, takes the tab color).
+- Bottom navigation shows icons only (no text), a little bigger, with more space above them.
+- App bar has more space above and below.
+
+## V6.9.16
+- Home redesigned. The header stays as it was. Under it: a search bar (tap opens Search), genre tabs (For You, Romance, Thriller, Horror, Fantasy, Campus), then Trending Now with big rank numbers 1, 2, 3 and the plays under each cover.
+- Continue Chat, From the community, Top Rated, New Stories and the genre rows now have a bold title with a pink "See all" on the right. Stories show as small square covers with name and plays. Continue Chat shows "Ep 2 of 3" and its See all opens Chats.
+- See all opens a new list screen with every story of that section.
+- Search bar and tabs stay on top while the page scrolls. A genre tab shows only that genre's stories.
+
 ## V6.9.15
 - Profile is now a settings list: profile card (Edit profile), grouped rows with icons, value and chevron. "AI brain" shows "Set your brain setup" until a key is saved; tapping it opens a bottom sheet (provider, API key, models, Save / test). Voice, Reading language, Text size and "I am" open bottom sheets too.
 - Gender is asked once after the first login (and saved on the profile, so a new phone does not ask again). Guests choose it locally.
