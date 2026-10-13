@@ -44,7 +44,7 @@ export default function Home() {
   useFocusEffect(useCallback(() => { listChats().then(setChats); }, []));
 
   const open = (story: Story) => nav.navigate('StoryDetail', { story });
-  const seeAll = (title: string, items: Story[]) => nav.navigate('SeeAll', { title, stories: items });
+  const seeAll = (title: string, items: Story[], ranked?: boolean) => nav.navigate('SeeAll', { title, stories: items, ranked });
 
   const { trending, rows } = useMemo(() => {
     if (!stories) return { trending: [] as Story[], rows: [] as Row[] };
@@ -86,13 +86,13 @@ export default function Home() {
             <Empty icon="book-outline" title="No stories here yet" body={`There are no ${tab} stories yet. Try another tab.`} />
           ) : (
             <View>
-              <SectionHeader title="Trending Now" icon="flame-outline" onSeeAll={() => seeAll('Trending Now', trending)} />
+              <SectionHeader title="Trending Now" icon="flame-outline" onSeeAll={() => seeAll('Trending Now', trending, true)} />
               <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 data={trending}
                 keyExtractor={(i) => i.id}
-                contentContainerStyle={{ paddingHorizontal: space.screen, gap: 6 }}
+                contentContainerStyle={{ paddingHorizontal: space.screen, gap: 18 }}
                 renderItem={({ item, index }) => <RankedTile story={item} rank={index + 1} onPress={() => open(item)} />}
               />
             </View>

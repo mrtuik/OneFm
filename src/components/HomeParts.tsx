@@ -63,12 +63,16 @@ export function MiniTile({ story, onPress, badge, sub }: { story: Story; onPress
   );
 }
 
-/** Trending story with a big rank number (1, 2, 3...) behind the cover and the plays underneath. */
+/** Width of the big rank number: one digit or two (10). The cover starts right after it, so 10 is never hidden. */
+const rankGap = (rank: number) => String(rank).length * 46 + 6;
+
+/** Trending story with a big rank number (1, 2, 3... 10) behind the cover and the plays underneath. */
 export function RankedTile({ story, rank, onPress }: { story: Story; rank: number; onPress: () => void }) {
+  const gap = rankGap(rank);
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [s.rank, { opacity: pressed ? 0.85 : 1 }]}>
-      <Text style={s.rankNum} allowFontScaling={false}>{rank}</Text>
-      <View style={{ marginLeft: 50 }}>
+    <Pressable onPress={onPress} style={({ pressed }) => [s.rank, { width: gap + 124, opacity: pressed ? 0.85 : 1 }]}>
+      <Text style={s.rankNum} allowFontScaling={false} includeFontPadding={false}>{rank}</Text>
+      <View style={{ marginLeft: gap }}>
         <Cover story={story} iconSize={40} style={{ width: 124, height: 124, borderRadius: radius.btn }} />
         <Text style={s.tileTitle} numberOfLines={1}>{story.title}</Text>
         <View style={s.playsRow}>
@@ -97,7 +101,7 @@ const s = StyleSheet.create({
   badgeText: { color: colors.text, fontSize: 11, fontWeight: '700' },
   tileTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginTop: 8 },
   tileSub: { color: colors.sub, fontSize: 12, marginTop: 2 },
-  rank: { width: 176, justifyContent: 'flex-end' },
-  rankNum: { position: 'absolute', left: -4, bottom: 18, fontSize: 96, lineHeight: 104, fontWeight: '900', color: 'rgba(254,244,244,0.28)' },
+  rank: { justifyContent: 'flex-end' },
+  rankNum: { position: 'absolute', left: 0, bottom: 34, fontSize: 92, lineHeight: 100, fontWeight: '900', letterSpacing: -4, color: 'rgba(254,244,244,0.28)' },
   playsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
 });

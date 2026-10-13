@@ -116,5 +116,7 @@ export interface Post {
   featured?: boolean;
   /** Public posts show in Community. Private posts are kept under private/<uid> and only the owner sees them. */
   visibility?: Visibility;
+  /** Made-up post that shows how the feed looks. Never written to the database. */
+  sample?: boolean;
 }
 export type Visibility = 'public' | 'private';

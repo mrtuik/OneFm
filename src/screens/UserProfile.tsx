@@ -21,10 +21,11 @@ const CELL = Math.floor((Dimensions.get('window').width - space.screen * 2 - GAP
 
 /** Profile: a card with banner, avatar, name, @username, numbers and one big button, then a grid of stories (Instagram style). My own profile also has a Private tab and the Edit profile button. */
 export default function UserProfile() {
-  const { uid } = useRoute<any>().params as { uid: string };
+  // Opened from the Me tab there are no params: it is my own profile.
+  const me = getAuth().currentUser?.uid;
+  const uid = ((useRoute<any>().params as { uid?: string } | undefined)?.uid ?? me) as string;
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const me = getAuth().currentUser?.uid;
   const own = me === uid;
   const [user, setUser] = useState<PublicUser | null>(null);
   const [posts, setPosts] = useState<Post[] | null>(null);

@@ -8,6 +8,7 @@ import { Sheet, SheetDivider, SheetItem } from '../components/Sheet';
 import { Empty } from '../components/Ui';
 import { colors, space } from '../theme';
 import { Post } from '../types';
+import { SAMPLE_POSTS } from '../data/samplePosts';
 import { deletePost, fetchPosts, isAdmin, myPostLikes, reportPost, setFeatured, setPostLiked } from '../firebase/community';
 
 /** Community tab: stories posted by readers. The admin can put a story on the Home page from the post menu. */
@@ -36,6 +37,7 @@ export default function Community() {
   const needSignIn = (what: string) => Alert.alert('Sign in required', `Sign in to ${what}.`);
 
   const toggleLike = async (p: Post) => {
+    if (p.sample) { setLikes((l) => ({ ...l, [p.id]: !l[p.id] })); return; }
     if (!uid) return needSignIn('like posts');
     const next = !likes[p.id];
     const bump = (d: number) => setPosts((list) => (list ?? []).map((x) => (x.id === p.id ? { ...x, likeCount: Math.max(0, x.likeCount + d) } : x)));
@@ -44,7 +46,7 @@ export default function Community() {
     catch (e: any) { setLikes((l) => ({ ...l, [p.id]: !next })); bump(next ? -1 : 1); Alert.alert('Could not update', String(e?.message ?? e)); }
   };
 
-  const open = (p: Post) => nav.navigate('StoryDetail', { story: { ...p.story, likeCount: p.likeCount }, postId: p.id });
+  const open = (p: Post) => nav.navigate('StoryDetail', { story: { ...p.story, likeCount: p.likeCount }, postId: p.sample ? undefined : p.id });
   const run = async (fn: () => Promise<void>, ok?: string) => {
     try { await fn(); await load(); if (ok) Alert.alert('Done', ok); }
     catch (e: any) { Alert.alert('Failed', String(e?.message ?? e)); }
@@ -60,7 +62,7 @@ export default function Community() {
         <View style={s.center}><ActivityIndicator color={colors.accent} /></View>
       ) : (
         <FlatList
-          data={posts}
+          data={[...posts, ...SAMPLE_POSTS]}
           keyExtractor={(p) => p.id}
           contentContainerStyle={{ padding: space.screen, gap: space.gap, paddingBottom: 96, flexGrow: 1 }}
           refreshControl={<RefreshControl refreshing={refreshing} tintColor={colors.accent} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
@@ -68,12 +70,12 @@ export default function Community() {
           ListEmptyComponent={<Empty icon="people-outline" title="No stories yet" body="Be the first. Tap + and share a story with the community." />}
           renderItem={({ item }) => (
             <PostCard
-              post={item}
+              post={item.sample && likes[item.id] ? { ...item, likeCount: item.likeCount + 1 } : item}
               liked={!!likes[item.id]}
               onOpen={() => open(item)}
-              onOpenUser={() => nav.navigate('UserProfile', { uid: item.creatorUid })}
+              onOpenUser={() => { if (!item.sample) nav.navigate('UserProfile', { uid: item.creatorUid }); }}
               onLike={() => toggleLike(item)}
-              onMenu={() => setMenu(item)}
+              onMenu={() => (item.sample ? Alert.alert('Sample post', 'Samples show how the feed looks. Real posts from readers appear above them.') : setMenu(item))}
             />
           )}
         />

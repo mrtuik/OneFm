@@ -1,5 +1,16 @@
 # One Fm changelog
 
+## V6.9.20
+- Trending Now: the rank numbers no longer touch the next cover (more space between stories), and 10 is fully visible (two digit ranks get more room).
+- See all page redesigned: two column grid of square covers with genre badge, bold title and plays. Trending shows #1, #2... on the covers.
+
+## V6.9.19
+- Bottom bar looks like Snapchat: icons only, a slightly lighter bar with a thin line on top. Tabs are now Home, Feed, Chats and Me.
+- Feed (replaces the Search tab and the Community tab): a normal scrolling feed of posts. Five sample posts sit under the real ones so it never looks empty (likes on samples stay on the phone).
+- Me tab (your avatar): opens your own profile with Edit profile, Settings, Public / Private. Guests are asked to sign in.
+- Search opens from the Home search bar as its own page with the keyboard already open. The language chips are gone (genre chips stay).
+- The chat icon is smaller, the same size as the other icons.
+
 ## V6.9.18
 - Profile page redesigned, black theme: a card with a banner, avatar on the banner edge, name, @username, bio, three numbers (Stories, Likes, Plays) and one big button (Post a story on my own profile, Share profile on others). Under it an Instagram style 3 column grid of story covers with Public / Private tabs on my own profile.
 - Settings: the profile card is now the way in. Tap it to open your profile. The separate "My public profile" row and the "Edit profile" link are gone. Edit profile and a Settings button are on the profile page.

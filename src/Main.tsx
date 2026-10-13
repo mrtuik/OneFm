@@ -24,6 +24,7 @@ import Chat from './screens/Chat';
 import { AppHeader } from './components/AppHeader';
 import { TabBar } from './components/TabBar';
 import { colors } from './theme';
+import { Empty, GradientButton } from './components/Ui';
 import { warmVoice } from './voice/engine';
 import { warmBrain, maybeStudy } from './brain/brain';
 import { fetchUser, isAdmin } from './firebase/community';
@@ -38,6 +39,18 @@ const theme = {
   colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: colors.line, primary: colors.accent },
 };
 
+/** The Me tab: my own profile. Guests are asked to sign in. */
+function Me({ user }: { user: User | null }) {
+  const { update } = useSettings();
+  if (user) return <UserProfile />;
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: 'center', gap: 16 }}>
+      <Empty icon="person-circle-outline" title="Sign in to see your profile" body="Your stories, likes and username live here." />
+      <GradientButton title="Sign in" onPress={() => update({ guest: false })} />
+    </View>
+  );
+}
+
 function Tabs({ user }: { user: User | null }) {
   return (
     <Tab.Navigator
@@ -45,9 +58,9 @@ function Tabs({ user }: { user: User | null }) {
       screenOptions={{ header: () => <AppHeader /> }}
     >
       <Tab.Screen name="Home" component={Home} />
-      <Tab.Screen name="Search" component={Search} />
+      <Tab.Screen name="Feed" component={Community} />
       <Tab.Screen name="Chats" component={Chats} />
-      <Tab.Screen name="Community" component={Community} />
+      <Tab.Screen name="Me">{() => <Me user={user} />}</Tab.Screen>
     </Tab.Navigator>
   );
 }
@@ -95,6 +108,7 @@ function Root() {
         <Stack.Screen name="Tabs" options={{ headerShown: false }}>
           {() => <Tabs user={user} />}
         </Stack.Screen>
+        <Stack.Screen name="Search" component={Search} options={{ title: 'Search' }} />
         <Stack.Screen name="StoryDetail" component={StoryDetail} options={{ headerShown: false }} />
         <Stack.Screen name="Chat" component={Chat} options={{ headerShown: false }} />
         <Stack.Screen name="Profile" component={Profile} options={{ title: 'Settings' }} />
