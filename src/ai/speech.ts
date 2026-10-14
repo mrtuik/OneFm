@@ -11,6 +11,38 @@ const wordCount = (t: string) =>
   t.replace(/\*/g, ' ').replace(/^\s*[A-Za-z][A-Za-z .'-]{0,24}:\s+/gm, '')
     .split(/\s+/).filter((w) => /[A-Za-z0-9\u0900-\u097F\u0980-\u09FF]/.test(w)).length;
 
+
+// ---- Speaker names: the voice says who is talking ("Tanima bolche, ...") before each spoken line ----
+const SPEAKER_LINE = /^\s*([A-Za-z][A-Za-z .'-]{0,24}):\s*(\S.*)$/;
+const SAYS: Record<Lang, string> = { bn: 'bolche', hi: 'ne kaha', en: 'says' };
+
+const isNarrator = (name: string) => /^(narrator|narration)$/i.test(name.trim());
+
+/** True when the message has at least one line spoken by a named character ("Tanima: ..."). */
+export function hasSpeakerLines(display: string): boolean {
+  return display.split('\n').some((l) => { const m = l.match(SPEAKER_LINE); return !!m && !isNarrator(m[1]); });
+}
+
+/**
+ * The text the voice should read, still in English letters: every line spoken by a character starts with
+ * the name and a short "says", e.g. "Tanima bolche, ekta kotha bolbo". Narration lines stay as they are.
+ * This text then goes through the normal native-script conversion.
+ */
+export function spokenSource(display: string, lang: Lang): string {
+  const out: string[] = [];
+  for (const raw of display.replace(/\r/g, '').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(SPEAKER_LINE);
+    let piece = line;
+    if (m && !isNarrator(m[1])) piece = lang === 'hi' ? `${m[1].trim()} ${SAYS.hi}, ${m[2]}` : `${m[1].trim()} ${SAYS[lang]}, ${m[2]}`;
+    else if (m) piece = m[2];
+    const core = piece.replace(/["\u201C\u201D*\s]+$/, '');
+    out.push(/[.!?\u0964\u2026]$/.test(core) ? piece : `${core}.`);
+  }
+  return out.join('\n');
+}
+
 /** The voice text must cover (almost) every word of what the reader sees. */
 const covers = (display: string, speech: string) => wordCount(speech) >= wordCount(display) * 0.85;
 
@@ -39,7 +71,7 @@ const RULES: Record<'hi' | 'bn', string> = {
  * low-temperature call, word by word. The model's own speech_text is only the fallback.
  */
 export async function ensureSpeech(lang: Lang, display: string, speech: string, cfg: ProviderSettings, key: string): Promise<string> {
-  const source = cleanSpeech(display);
+  const source = cleanSpeech(spokenSource(display, lang));
   if (lang === 'en') return source || speech;
 
   const current = cleanSpeech(speech);
@@ -131,7 +163,7 @@ async function convertPart(lang: 'hi' | 'bn', seg: string, cfg: ProviderSettings
  * and the voice starts while the rest is still being converted. A part that could not be converted resolves to ''.
  */
 export function speechParts(lang: Lang, display: string, cfg: ProviderSettings, key: string): Promise<string>[] {
-  const source = cleanSpeech(display);
+  const source = cleanSpeech(spokenSource(display, lang));
   if (lang === 'en') return [Promise.resolve(source)];
   return splitForSpeech(source).map((seg) => convertPart(lang, seg, cfg, key).catch(() => ''));
 }

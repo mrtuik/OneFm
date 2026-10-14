@@ -14,7 +14,7 @@ import { useSettings } from '../state/settings';
 import { getApiKey } from '../ai/secure';
 import { deleteChat, loadChat, newChat, saveChat } from '../chat/store';
 import { TurnOptions, takeTurn } from '../chat/engine';
-import { speechIsGood, speechParts } from '../ai/speech';
+import { hasSpeakerLines, speechIsGood, speechParts } from '../ai/speech';
 import { YOU, isYou, playableRoles } from '../chat/roles';
 import { cleanSpeech } from '../format';
 import { UiText, uiText } from '../chat/uiText';
@@ -125,7 +125,8 @@ export default function Chat() {
       // it plays at once (no second network call). Only a bad speech_text is rewritten in the background.
       if (ai?.speech && key) {
         const m = ai;
-        if (speechIsGood(story.language, m.text, m.speech!)) {
+        // A message with a named speaker always goes through the parts path, so the voice can say "Name bolche, ...".
+        if (speechIsGood(story.language, m.text, m.speech!) && !hasSpeakerLines(m.text)) {
           pendingSpeak = { id: m.id, text: cleanSpeech(m.speech!) };
         } else {
           // Bad voice text: convert the message in parts. Part 1 is short, so the voice starts after about a second.

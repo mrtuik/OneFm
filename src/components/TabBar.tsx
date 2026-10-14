@@ -1,6 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatIcon, HomeIcon } from './Icons';
@@ -8,7 +7,8 @@ import { UserAvatar } from './UserAvatar';
 import { colors, TAB_BAR_HEIGHT } from '../theme';
 import type { User } from '../firebase/auth';
 
-const ICON = 26;
+// Every tab glyph is drawn about 20px tall so the four icons look the same size.
+const GLYPH = 20;
 const BAR = '#141010';
 
 /** Icons only, like Snapchat: a slightly lighter bar with a thin line on top. Home, Feed, Chats, Me (my profile). */
@@ -24,12 +24,12 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
           if (!focused && !e.defaultPrevented) navigation.navigate(route.name as never);
         };
         let icon: React.ReactNode;
-        if (route.name === 'Home') icon = <HomeIcon size={ICON} color={color} />;
-        else if (route.name === 'Feed') icon = <Ionicons name={focused ? 'newspaper' : 'newspaper-outline'} size={ICON - 2} color={color} />;
-        else if (route.name === 'Chats') icon = <ChatIcon size={ICON - 4} color={color} cut={BAR} />;
+        if (route.name === 'Home') icon = <HomeIcon size={GLYPH + 4} color={color} />;
+        else if (route.name === 'Feed') icon = <Image source={require('../../assets/feed-icon.png')} style={{ width: GLYPH, height: GLYPH, tintColor: color }} resizeMode="contain" />;
+        else if (route.name === 'Chats') icon = <ChatIcon size={GLYPH} color={color} cut={BAR} />;
         else icon = (
           <View style={[s.ring, focused && { borderColor: colors.accent }]}>
-            <UserAvatar user={user} size={24} active={focused} />
+            <UserAvatar user={user} size={20} active={focused} />
           </View>
         );
         return (
@@ -51,8 +51,8 @@ export function TabBar({ state, navigation, user }: BottomTabBarProps & { user: 
 }
 
 const s = StyleSheet.create({
-  bar: { flexDirection: 'row', backgroundColor: BAR, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  bar: { flexDirection: 'row', backgroundColor: BAR, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   item: { flex: 1, alignItems: 'center' },
-  iconBox: { height: 32, alignItems: 'center', justifyContent: 'center' },
-  ring: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  iconBox: { height: 28, alignItems: 'center', justifyContent: 'center' },
+  ring: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
 });

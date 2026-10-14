@@ -27,4 +27,4 @@ export const poster = {
   detailSize: 220, // story detail poster, square
 };
 
-export const TAB_BAR_HEIGHT = 64;
+export const TAB_BAR_HEIGHT = 56;
