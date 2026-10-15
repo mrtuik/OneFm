@@ -173,13 +173,7 @@ export default function Chat() {
   const canType = !!hasKey && !busy && !waitingNext && !empty;
   const inputOn = !!hasKey && !waitingNext;
 
-  // Open the keyboard by itself once the chat is ready (like a normal chat app).
-  const readyToType = loaded && inputOn && !empty && !showPicker;
-  useEffect(() => {
-    if (!readyToType) return;
-    const t = setTimeout(() => inputRef.current?.focus(), 350);
-    return () => clearTimeout(t);
-  }, [readyToType]);
+  // The keyboard never opens by itself: it opens only when the person taps the input.
 
   const pickRole = (role: string) => {
     const c = chatRef.current;
