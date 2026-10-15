@@ -1,5 +1,9 @@
 # One Fm changelog
 
+## V6.9.24
+- Chats are now kept per account on the phone. Signing in with another account on the same phone shows that account's own chats (still local only, nothing goes to Firebase). Chats from before this update go to the first account that opens the app after updating.
+- Chats tab shows the story thumbnail (the real picture, including ones changed by the developer) instead of a plain icon.
+
 ## V6.9.23
 - Trending Now rank numbers (1, 2, 3 ... 10) now use the Inter font (Black). They are drawn as shapes (rankDigits.ts), so no font file has to be loaded. Size and colour: `RANK_H` and `RANK_COLOR` in HomeParts.tsx.
 

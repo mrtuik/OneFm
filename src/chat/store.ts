@@ -1,10 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth } from '@react-native-firebase/auth';
 import { ChatState, Story } from '../types';
 
 // Chats stay on this phone (PRD: chat messages, summaries and facts are local only).
-const chatKey = (id: string) => `onefm.chat.${id}`;
-const INDEX = 'onefm.chats.index';
+// Every account has its own chats on the phone: the keys carry the signed-in user's id ('guest' when not signed in).
+const uid = () => getAuth().currentUser?.uid ?? 'guest';
+const chatKey = (id: string) => `onefm.chat.${uid()}.${id}`;
+const indexKey = () => `onefm.chats.${uid()}.index`;
 const MAX_STORED_MESSAGES = 300;
+
+// Before this version every account on a phone shared one list (onefm.chat.<id> and onefm.chats.index).
+// The first account that opens the app after the update takes those old chats, once.
+const LEGACY_INDEX = 'onefm.chats.index';
+const MIGRATED = 'onefm.chats.migrated.v1';
+let migrating: Promise<void> | null = null;
+function migrate(): Promise<void> {
+  if (!migrating) {
+    migrating = (async () => {
+      try {
+        if (await AsyncStorage.getItem(MIGRATED)) return;
+        let ids: string[] = [];
+        try { ids = JSON.parse((await AsyncStorage.getItem(LEGACY_INDEX)) ?? '[]'); } catch { ids = []; }
+        for (const id of ids) {
+          const raw = await AsyncStorage.getItem(`onefm.chat.${id}`);
+          if (raw) { await AsyncStorage.setItem(chatKey(id), raw); await AsyncStorage.removeItem(`onefm.chat.${id}`); }
+        }
+        if (ids.length) await AsyncStorage.setItem(indexKey(), JSON.stringify(ids));
+        await AsyncStorage.removeItem(LEGACY_INDEX);
+        await AsyncStorage.setItem(MIGRATED, '1');
+      } catch { migrating = null; } // try again next time
+    })();
+  }
+  return migrating;
+}
 
 export function newChat(story: Story): ChatState {
   return {
@@ -16,28 +44,31 @@ export function newChat(story: Story): ChatState {
 
 export async function loadChat(id: string): Promise<ChatState | null> {
   try {
+    await migrate();
     const raw = await AsyncStorage.getItem(chatKey(id));
     return raw ? (JSON.parse(raw) as ChatState) : null;
   } catch { return null; }
 }
 
 async function readIndex(): Promise<string[]> {
-  try { return JSON.parse((await AsyncStorage.getItem(INDEX)) ?? '[]'); } catch { return []; }
+  await migrate();
+  try { return JSON.parse((await AsyncStorage.getItem(indexKey())) ?? '[]'); } catch { return []; }
 }
 
 export async function saveChat(chat: ChatState): Promise<void> {
+  await migrate();
   const c: ChatState = { ...chat, messages: chat.messages.slice(-MAX_STORED_MESSAGES), updatedAt: Date.now() };
   try {
     await AsyncStorage.setItem(chatKey(c.storyId), JSON.stringify(c));
     const idx = (await readIndex()).filter((x) => x !== c.storyId);
-    await AsyncStorage.setItem(INDEX, JSON.stringify([c.storyId, ...idx]));
+    await AsyncStorage.setItem(indexKey(), JSON.stringify([c.storyId, ...idx]));
   } catch {}
 }
 
 export async function deleteChat(id: string): Promise<void> {
   try {
     await AsyncStorage.removeItem(chatKey(id));
-    await AsyncStorage.setItem(INDEX, JSON.stringify((await readIndex()).filter((x) => x !== id)));
+    await AsyncStorage.setItem(indexKey(), JSON.stringify((await readIndex()).filter((x) => x !== id)));
   } catch {}
 }
 
