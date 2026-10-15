@@ -376,8 +376,11 @@ export default function Chat() {
                 </ScrollView>
               ) : null}
 
-              {/* Composer: no outline. The text field on top, your role and send underneath. Tap anywhere to type. */}
-              <Pressable onPress={() => inputRef.current?.focus()} style={[s2.composer, !inputOn && { opacity: 0.55 }]}>
+              {/* Composer: Instagram-style glass pill. Left: role initial in a black circle (tap to change role). Middle: text. Right: black send circle. */}
+              <View style={[s2.composer, !inputOn && { opacity: 0.55 }]}>
+                <Pressable onPress={() => setPickerOpen(true)} hitSlop={6} style={s2.charDot} accessibilityLabel="Change role">
+                  <Text style={s2.charInitial}>{initial}</Text>
+                </Pressable>
                 <TextInput
                   ref={inputRef}
                   style={s2.input}
@@ -391,20 +394,13 @@ export default function Chat() {
                   selectionColor={colors.accent}
                   cursorColor={colors.accent}
                   underlineColorAndroid="transparent"
-                  textAlignVertical="top"
+                  textAlignVertical="center"
                   blurOnSubmit={false}
                 />
-                <View style={s2.toolbar}>
-                  <Pressable onPress={() => setPickerOpen(true)} hitSlop={6} style={s2.charChip} accessibilityLabel="Change role">
-                    <View style={s2.charDot}><Text style={s2.charInitial}>{initial}</Text></View>
-                    <Text style={s2.charName} numberOfLines={1}>{myName}</Text>
-                  </Pressable>
-                  <View style={{ flex: 1 }} />
-                  <Pressable onPress={() => send(input)} disabled={!canSend} style={[s2.send, !canSend && s2.sendOff]} accessibilityLabel="Send">
-                    <Ionicons name="arrow-up" size={20} color={canSend ? colors.onAccent : colors.sub} />
-                  </Pressable>
-                </View>
-              </Pressable>
+                <Pressable onPress={() => send(input)} disabled={!canSend} style={[s2.send, !canSend && s2.sendOff]} accessibilityLabel="Send">
+                  <Ionicons name="arrow-up" size={20} color={canSend ? '#FFFFFF' : colors.sub} />
+                </Pressable>
+              </View>
             </View>
           )}
         </>
@@ -458,15 +454,12 @@ const s2 = StyleSheet.create({
   // No outline anywhere in the dock: suggestions and the composer are soft filled shapes.
   choice: { maxWidth: 260, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, backgroundColor: 'rgba(254,244,244,0.08)' },
   choiceText: { color: colors.text, fontSize: 14 },
-  composer: { borderRadius: 24, backgroundColor: colors.surface, paddingTop: 6, paddingHorizontal: 8, paddingBottom: 8 },
-  input: { minHeight: 48, maxHeight: 140, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 6, color: colors.text, fontSize: 16, lineHeight: 22 },
-  toolbar: { flexDirection: 'row', alignItems: 'center', paddingTop: 2 },
-  charChip: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 200, height: 36, paddingLeft: 4, paddingRight: 14, borderRadius: 18, backgroundColor: 'rgba(254,244,244,0.08)' },
-  charDot: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
-  charInitial: { color: colors.accent, fontSize: 12, fontWeight: '800' },
-  charName: { color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1 },
-  send: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  sendOff: { backgroundColor: colors.bg },
+  composer: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.10)', paddingVertical: 8, paddingHorizontal: 8 },
+  input: { flex: 1, minHeight: 36, maxHeight: 120, paddingHorizontal: 4, paddingVertical: 6, color: colors.text, fontSize: 16, lineHeight: 22 },
+  charDot: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' },
+  charInitial: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  send: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' },
+  sendOff: { backgroundColor: '#000000', opacity: 0.6 },
 
   pickTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
   pickHint: { color: colors.sub, fontSize: 14, lineHeight: 20 },
