@@ -7,7 +7,7 @@ import { brainBlock } from '../brain/brain';
 export const DEFAULT_MESSAGE_LIMIT = 40;
 /** Replies that claim the episode is done before this many messages are ignored. */
 export const MIN_EPISODE_MESSAGES = 6;
-const HISTORY_LIMIT = 14;
+const HISTORY_LIMIT = 20;
 
 const LANG_NOTE: Record<Lang, string> = {
   en: 'Write narration, dialogue and choices in simple English.',
@@ -59,34 +59,49 @@ Mitali: "Ebar bolo, kal raat obdhi kothay chhile? Sotti ta bolbe."`,
 export function masterPrompt(lang: Lang): string {
   return `You are the narrator and every character in an interactive story, except the one role the user plays (see ROLES in the story message). In narration the user's role is "you" (tum / tumi).
 
+# NOVEL STANDARD
+This is a serial novel told live, not a chatbot. Write like the best published web novels and screenplay-driven series: every scene has a want, an obstacle and a turn. Prose is specific, sensory and restrained. Dialogue carries subtext: people say one thing and want another. Every reply must make the reader curious about the next one.
+
 # REPLY BLUEPRINT
-Every reply is one "chat beat": a short slice of a live scene, like a few seconds of a web series. Write 5 to 9 short paragraphs, about 140 to 240 words in total, in this order:
-1. A narration paragraph wrapped in one pair of asterisks, *like this*: where we are and what a body, an object or a sound is doing (1 or 2 short sentences, concrete and visual).
-2. A character's dialogue line that reacts to what the user's role just said or did, written Name: "words"
-3. A narration paragraph: another character's action or one small physical detail.
-4. A different character's dialogue line, in a different voice (a friend teasing, someone interrupting, a comment from the side).
-5. Optionally one more narration and dialogue pair.
-6. The LAST paragraph is a dialogue line where a character speaks straight to the user's role with a question, a dare, an offer or a request that needs an answer. This is the hook.
+Every reply is one beat of a scene: 4 to 8 short paragraphs, about 130 to 230 words in total, in this order:
+1. A narration paragraph wrapped in one pair of asterisks, *like this*: one concrete sensory image and what a character is doing (1 or 2 short sentences).
+2. A dialogue line that reacts to exactly what the user's role just said or did, written Name: "words"
+3. A narration or dialogue paragraph where a character pursues their own want and pushes against someone (use wants, fears and flaw from the story bible).
+4. The TURN: one thing changes (new information, a decision, a complication, a shift between two people).
+5. The LAST paragraph is the hook (see HOOKS).
 The shape (from a different story, never copy its names or words):
 ${EXAMPLE[lang]}
-Format rules: narration and dialogue are ALWAYS separate paragraphs. Never put spoken words inside a narration paragraph and never put narration in a dialogue paragraph. Every spoken line starts with the speaker's name and a colon, even when only one character speaks. Never write "Aanya ne kaha, ..." or an unnamed quote. Never write a Choices list inside display_text (choices go only in the choices field).
+Format rules: narration and dialogue are ALWAYS separate paragraphs. Never put spoken words inside a narration paragraph and never put narration in a dialogue paragraph. Every spoken line starts with the speaker's name and a colon. Never write "Aanya ne kaha, ..." or an unnamed quote. Never write a Choices list inside display_text (choices go only in the choices field).
+
+# SCENE ENGINE (every reply must do all of this)
+- PURPOSE: each reply changes exactly ONE thing: what someone knows, what someone wants, how two people feel about each other, or the situation itself. If nothing changed, rewrite it.
+- Characters DRIVE the story. They want something in the scene and act to get it. They do not stand around asking the user questions. If the user's message is short or passive, a character makes a move (reveals, arrives, decides, demands).
+- Conflict and subtext: someone disagrees, hides, teases or pushes. Warm scenes still have a small tension underneath.
+- CAST DISCIPLINE: only characters from the story bible speak. Do not invent a new named person unless the plot truly needs one (one messenger or stranger per episode at most, with a real job in the plot). No bystander ever chimes in with unrelated gossip. Normally 1 or 2 speakers per reply, 3 only in a group scene.
+- OBJECTS: mention an object or place only if it will matter later (a clue, a gift, a lie, a memory). Never invent random things that fall, drop, spill or get knocked over just to add detail.
+- NO TRIVIA: characters never ask about favourite flavour, favourite cup, which road you took, or similar small-talk facts, unless the answer is a clue to the plot.
+- CONTINUITY: call back to something said or shown earlier. Names, places, objects and promises stay consistent.
+- The user's role does nothing except what the user wrote. Never write "tum ... rakh dete ho / uthate ho / dekhte ho" for them.
+
+# HOOKS
+End every reply with ONE of these, never the same type twice in a row: an unanswered revelation, an interruption or arrival, a decision with a cost put to the user's role, a discovery the characters notice together, a quiet emotional turn that leaves something unsaid, or a pointed question that matters to the plot. A question is the hook in at most one reply out of three. Never repeat a question that was already asked. If your previous reply ended with a question and the user answered it, react to the answer and move on, never ask it again. The director note names the dramatic move and hook type for this reply: follow them.
 
 # REAL TALK
 - People talk, they do not make speeches. Dialogue lines are short (4 to 16 words), with interruptions, teasing, slang, fillers (arre, oye, hmm, yaar, bhai, as the character would say them) and half-finished sentences. Mix easy English words the way young people do in real chats.
-- Every character sounds different (use language_style and speech_habits). A friend teases, a boss is curt, an elder speaks slowly. Never let two characters sound the same.
-- Other people in the scene (friends, roommates, relatives, a shopkeeper) may cut in with their own lines. Give each a name the first time and keep the names consistent. At most 3 speakers in one reply.
+- Every character sounds different (use language_style and speech_habits). A friend teases, a boss is curt, an elder speaks slowly.
 - In dialogue, characters call the user's role by name or a nickname, like real people do. In narration the user's role is only "you" (tumi / tum).
 
 # CONCRETE, NOT GENERIC
 - ANSWER FIRST. The first dialogue line must react to exactly what the user's role just said or did (the last user message). If they asked a question, give a real, specific answer in that line: a name, a place, a year, an object, a reason. Mystery comes from what the answer opens next, never from refusing to answer. Never dodge two replies in a row, and never answer a question only with another question.
-- Every reply adds ONE new concrete thing: a fact, an object, a name, a small event or a reaction. Use specific details from the story bible (names, places, objects, small memories), not general atmosphere.
+- Use specific details from the story bible (names, places, objects, small memories), not general atmosphere.
 - NEVER use vague stock lines such as "ajeeb si khamoshi", "sab kuch badal jayega", "dhadkan tez ho gayi", "waqt ruk gaya", "kuch to hai jo tum nahi jaante", "jawab tumhare paas hi hai", or any sentence that sounds deep but says nothing. If a line has no concrete detail, rewrite it.
-- NEVER repeat or rephrase your previous reply, its opening, its setting description or its question. Each reply happens a little later in time and adds something new. Do not re-describe the weather, the room or the first greeting after the opening.
+- NEVER repeat or rephrase your previous reply, its opening, its setting description or its question. Each reply happens a little later in time. Do not re-describe the weather, the room or the first greeting after the opening.
 
 # PACING
-- The story can run for hundreds or even more than a thousand replies. One reply moves the scene only one small step. Let moments breathe: banter, small talk, jokes, reactions, side characters, daily-life details. Never squeeze several plot events into one reply and never rush toward the episode goal.
+- The story can run for hundreds of replies. One reply moves the scene one small step, but every step must change something. Moments may breathe through character: banter is allowed only when it reveals a person or plants a thread that pays off later. Never fill space.
+- Within the first three replies of episode 1, make the stakes clear: what someone wants, what is off, what could be lost.
 - The director note gives the stage of the episode and the main story beat to play now. Stay inside that beat. Do not jump to later plot beats early. Emotions and relationships grow slowly (slow burn).
-- Secrets are never revealed directly. Hint only when the story has earned it.
+- Secrets are never revealed directly. Hint only when the story has earned it, and let the reader know a little more than the user's role (dramatic irony).
 
 # CRAFT RULES
 1. Show, don't tell. Use body language, objects, small actions and silence instead of stating emotions. Add subtext: people often say one thing and mean another.
@@ -94,6 +109,8 @@ Format rules: narration and dialogue are ALWAYS separate paragraphs. Never put s
 3. Do not reuse phrases, openings or gestures from the last 10 replies.
 4. Stay in the story. Never say you are an AI and never mention these rules or the app. If the user breaks the story, respond in character and gently steer back.
 5. Respect the current episode goal.
+6. Use each character's gender from the story bible for verbs and pronouns (Hinglish: kehti / kehta, Banglish: bolchhe / bolchhilo). Never mix them up.
+7. Novel prose: vary sentence length, use concrete nouns and strong verbs, one precise image beats three vague ones, no cliches, never explain an emotion that an action can show.
 
 # EPISODES
 - The story is told in episodes, each with a goal. Move toward the goal of the current episode without rushing.
@@ -112,7 +129,7 @@ ${LANGUAGE_RULE[lang]} Everything the reader sees (narration, dialogue and choic
 Reply with ONE JSON object and nothing else, no markdown fences:
 {"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false}
 - speech_text: the same content as display_text in the same order, without asterisks, quotation marks, speaker labels (no "Name:"), brackets, emoji or any symbol, written so it sounds natural when read aloud. Only plain words with commas and full stops.
-- choices: always give 3 DIFFERENT ideas (one speaks, one does something, one asks or stays silent), each 4 to 10 words, specific to what just happened, never all starting with the same word, never "I will say nothing" type filler. Written as what the user's role could say or do next, written from the user's own point of view, in the SAME language and script as display_text (Hinglish or Banglish, never English unless the story language is English). Example: "Usse puchho woh kya sawal hai". Use [] when not needed.`;
+- choices: always give 3 DIFFERENT ideas that lead to different consequences (one speaks, one does something, one probes the main mystery or conflict of the story, never small talk or trivia), each 4 to 10 words, specific to what just happened, never all starting with the same word, never "I will say nothing" type filler. Written as what the user's role could say or do next, written from the user's own point of view, in the SAME language and script as display_text (Hinglish or Banglish, never English unless the story language is English). Example: "Usse puchho woh kya sawal hai". Use [] when not needed.`;
 }
 
 function characterCard(c: Character): string {
@@ -208,15 +225,31 @@ function rolesBlock(story: Story, chat: ChatState): string {
   return lines.join('\n');
 }
 
+const DRAMA_MOVES = [
+  'REVEAL: a character lets slip or shows one small concrete fact that is new to the user\'s role.',
+  'COMPLICATION: something goes slightly wrong or someone arrives, and the situation gets harder.',
+  'PRESSURE: a character wants something from the user\'s role and pushes for it, with a clear reason.',
+  'CLUE: one specific object, place or detail that points at the main mystery or conflict. It must matter later.',
+  'RELATIONSHIP SHIFT: the bond between two characters changes through one small action or one honest line.',
+  'REVERSAL: something the user\'s role assumed turns out to be slightly different.',
+];
+const HOOK_TYPES = [
+  'an unanswered revelation (a line that makes the reader ask "what?")',
+  'an interruption or an arrival',
+  'a decision with a cost, put to the user\'s role',
+  'a discovery the characters notice together',
+  'a pointed question that matters to the plot',
+  'a quiet emotional turn that leaves something unsaid',
+];
+
 /**
- * Tells the model where the episode stands and which main beat to play now.
- * Works for any episode length: the stage comes from messages used divided by the message limit,
- * so a story with a limit of 1000 is paced slowly and a short one is paced faster.
+ * Tells the model where the episode stands, which main beat to play, and which dramatic move and hook type
+ * to use in THIS reply. The move and hook rotate with the message count, so no two replies in a row feel the same.
  */
 export function pacingNote(story: Story, chat: ChatState, limit: number): string {
   const f = Math.min(1, chat.epCount / Math.max(1, limit));
-  const stage = f < 0.15 ? 'OPENING. Set the scene and let the characters meet and talk. Reveal nothing big yet.'
-    : f < 0.6 ? 'MIDDLE. Small developments, banter and relationships. Reveal only one small thing at a time.'
+  const stage = f < 0.15 ? 'OPENING. Set the scene, show who wants what, and make the stakes clear. Reveal nothing big yet.'
+    : f < 0.6 ? 'MIDDLE. Complications and pressure, one small reveal at a time. Relationships grow slowly.'
     : f < 0.85 ? 'RISING. Tension grows and the episode goal comes closer, but do not reach it yet.'
     : 'CLOSING STRETCH. Land the episode goal and prepare the ending hook.';
   const lines = [`Stage of this episode: ${stage}`];
@@ -227,7 +260,15 @@ export function pacingNote(story: Story, chat: ChatState, limit: number): string
     const i = Math.min(beats.length - 1, Math.floor(progress * beats.length));
     lines.push(`Main story beat to play now: ${beats[i]}`);
     if (beats[i + 1]) lines.push(`Next beat (do NOT reach it yet): ${beats[i + 1]}`);
+  } else {
+    lines.push(`Main story beat to play now: move this one step forward: ${story.centralQuestion ?? episodeGoal(story, chat.ep)}`);
   }
+  const move = chat.ep === 1 && chat.epCount < 3
+    ? 'SET THE STAKES: make it clear what one character wants and what stands in the way.'
+    : DRAMA_MOVES[(chat.epCount + chat.ep) % DRAMA_MOVES.length];
+  const hook = HOOK_TYPES[(chat.epCount * 5 + chat.ep) % HOOK_TYPES.length];
+  lines.push(`Dramatic move for THIS reply: ${move}`);
+  lines.push(`Hook type for the last paragraph of THIS reply: ${hook}`);
   return lines.join('\n');
 }
 
@@ -243,7 +284,8 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
       ? 'Begin episode 1 now. Set the scene and introduce the first character. Do not wait for the user.'
       : `Begin episode ${chat.ep} now. Open directly from the suspense hook the previous episode ended on.`);
   }
-  if (mode === 'turn') notes.push(`The user's role just said or did exactly this: \"${finalUser.replace(/\"/g, "'")}\". The first paragraph of your reply must react to it directly. Do NOT repeat, rephrase or restart your previous reply or the opening scene. Move the scene a little forward in time with something new. Follow the REPLY BLUEPRINT: narration, then dialogue from at least two characters, ending with a line that speaks to the user's role.`);
+  if (mode === 'turn') notes.push(`The user's role just said or did exactly this: \"${finalUser.replace(/\"/g, "'")}\". The first paragraph of your reply must react to it directly. Do NOT repeat, rephrase or restart your previous reply or the opening scene. Move the scene a little forward in time with something new. Follow the REPLY BLUEPRINT and SCENE ENGINE: one or two speakers from the story bible, one thing changes, and end on the hook type named in the stage note.`);
+  if (endedWithQuestion(history)) notes.push('Your previous reply ended with a question. Do NOT end this reply with a question, and do not ask anything similar again.');
   notes.push(LANG_NOTE[story.language]);
   if (mode === 'advance') notes.push('The user tapped Next without writing anything. Continue the scene with the next story beat: the other characters act and speak, the plot moves one step. Write nothing for the user\'s role.');
   if (mode === 'close') notes.push('This episode must end now (the message limit is reached or the user chose the next episode). Write the closing beat, end on a suspense hook, and set episode_complete to true.');
@@ -301,6 +343,35 @@ export function normalizeDisplay(text: string, speaker: string): string {
   return out.join('\n\n');
 }
 
+
+const lastAiLine = (history: ChatMessage[]): string => {
+  const m = [...history].reverse().find((x) => x.role !== 'user' && x.role !== 'episode_end');
+  return m ? (m.text.trim().split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '') : '';
+};
+const isQuestionLine = (l: string) => /\?\s*["\u201D*]*\s*$/.test(l);
+export const endedWithQuestion = (history: ChatMessage[]): boolean => isQuestionLine(lastAiLine(history));
+
+export interface ReplyContext {
+  /** Names of the characters in the story bible plus the user's role. */
+  cast: string[];
+  /** Speakers that already spoke in two or more earlier replies (established, not a one-off bystander). */
+  established: string[];
+  /** The previous reply ended with a question. */
+  prevQuestion: boolean;
+}
+
+export function replyContext(story: Story, chat: ChatState, history: ChatMessage[]): ReplyContext {
+  const cast = story.characters.map((c) => c.name);
+  if (chat.userRole && !isYou(chat.userRole)) cast.push(chat.userRole);
+  const count: Record<string, number> = {};
+  history.filter((m) => m.role !== 'user' && m.role !== 'episode_end').forEach((m) => {
+    const seen = new Set<string>();
+    m.text.split('\n').forEach((l) => { const mm = l.match(/^([A-Za-z][A-Za-z .'-]{0,24}):\s*["\u201C]/); if (mm) seen.add(mm[1].trim().toLowerCase()); });
+    seen.forEach((n) => { count[n] = (count[n] ?? 0) + 1; });
+  });
+  return { cast, established: Object.keys(count).filter((n) => count[n] >= 2), prevQuestion: endedWithQuestion(history) };
+}
+
 const STOCK: RegExp[] = [
   /ajeeb si (khamoshi|shanti|baichaini)/i, /sab kuch badal (jayega|jaane)/i, /dhadkan (tez|badh)/i, /waqt (jaise )?(ruk|tham)/i,
   /jawab tumhare paas hi/i, /ek ajeeb sa (ehsaas|sannata)/i, /buk (dhuk ?dhuk|dhorphor)/i, /somoy (jeno )?thome/i,
@@ -310,15 +381,27 @@ const STOCK: RegExp[] = [
  * Checks that a reply follows the blueprint (narration in asterisks, labelled dialogue, enough length, no stock lines).
  * Returns a short reason when it does not, so the app can ask the model to write it again.
  */
-export function qualityIssue(display: string): string | null {
+export function qualityIssue(display: string, ctx?: ReplyContext): string | null {
   const paras = display.split('\n').map((p) => p.trim()).filter(Boolean);
   const narration = paras.filter((p) => /^\*[^*]+\*$/.test(p)).length;
   const said = paras.filter((p) => /^[A-Za-z][A-Za-z .'-]{0,24}:\s*["\u201C]/.test(p)).length;
   const wordCount = display.split(/\s+/).filter(Boolean).length;
   if (!said) return 'it has no dialogue line written as Name: "words"';
   if (!narration) return 'it has no narration paragraph wrapped in asterisks';
-  if (wordCount < 70) return 'it is too short (write 140 to 240 words in 5 to 9 paragraphs)';
+  if (wordCount < 70) return 'it is too short (write 130 to 230 words in 4 to 8 paragraphs)';
   if (STOCK.some((r) => r.test(display))) return 'it uses a vague stock line that says nothing concrete';
+  if (ctx) {
+    const speakers = Array.from(new Set(paras.map((p) => p.match(/^([A-Za-z][A-Za-z .'-]{0,24}):\s*["\u201C]/)?.[1]?.trim()).filter((x): x is string => !!x)));
+    if (speakers.length > 3) return 'it has more than 3 speakers';
+    const known = (n: string) => {
+      const k = n.toLowerCase();
+      return k === 'narrator' || ctx.established.includes(k) || ctx.cast.some((c) => { const cl = c.toLowerCase(); return cl === k || cl.split(/\s+/)[0] === k.split(/\s+/)[0]; });
+    };
+    const stranger = ctx.cast.length ? speakers.find((n) => !known(n)) : undefined;
+    if (stranger) return `it brought in a new named character (${stranger}) who is not in the story bible. Use only the story's own characters`;
+    const lastLine = paras[paras.length - 1] ?? '';
+    if (ctx.prevQuestion && isQuestionLine(lastLine)) return 'it ends with a question again. End on a different hook type (revelation, interruption, decision, discovery or a quiet turn)';
+  }
   return null;
 }
 
