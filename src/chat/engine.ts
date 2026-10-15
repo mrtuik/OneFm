@@ -47,7 +47,7 @@ async function askModel(story: Story, chat: ChatState, finalUser: string, histor
     const last = base[base.length - 1];
     const note = repeated
       ? 'Your previous attempt repeated an earlier reply. Write a completely different reply that answers the user\'s message first and adds something new. Do not reuse the earlier opening line or scene description.'
-      : `Your previous attempt was rejected because ${issue}. Write it again and follow the REPLY BLUEPRINT exactly: narration paragraphs in asterisks, dialogue lines written as Name: "words" from the story's own characters only, 130 to 230 words, one clear change in the scene, and the hook type named in the director note.`;
+      : `Your previous attempt was rejected because ${issue}. Write it again and follow the REPLY BLUEPRINT exactly: narration paragraphs in asterisks, dialogue lines written as Name: "words" from the story's own characters only, matching the length to the moment, at least two spoken lines, narration under half, and a different opening from earlier replies.`;
     messages = [...base.slice(0, -1), { ...last, content: `${last.content}\n\n[${note}]` }];
   }
   if (fallback) return { ...fallback, display_text: await ensureLanguage(story.language, fallback.display_text, cfg, key) };
