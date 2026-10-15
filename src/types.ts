@@ -72,8 +72,24 @@ export interface ChatMessage {
   /** speech_text: what is sent to the voice engine (native script for Bangla and Hindi). */
   speech?: string;
   choices?: string[];
+  /** Story state after this AI reply (scene, who feels / knows what, user decisions). Dropping the reply drops its state, so regenerate never duplicates events. */
+  state?: StoryState;
   ep: number;
   createdAt: number;
+}
+
+/** Live story state kept beside the chat. Small on purpose: it is sent with every reply. */
+export interface StoryState {
+  scene?: { where: string; present: string[]; doing: string };
+  chars?: Record<string, { mood?: string; knows?: string[] }>;
+  /** Significant choices the reader made. Never contradicted later. */
+  decisions?: string[];
+}
+/** What the model reports after each reply. Every part is optional and validated before use. */
+export interface StateUpdate {
+  scene?: { where?: string; present?: string[]; doing?: string };
+  characters?: { name: string; toward_user?: string; learned?: string }[];
+  decision?: string;
 }
 export interface Fact { text: string; importance: number; ep: number; type?: string; characters?: string[] }
 export interface EpisodeSummary { ep: number; text: string }

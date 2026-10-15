@@ -1,4 +1,4 @@
-import { ChatMessage, ChatState, Character, Fact, Lang, Story } from '../types';
+import { ChatMessage, ChatState, Character, Fact, Lang, StateUpdate, Story, StoryState } from '../types';
 import { LlmMessage } from './provider';
 import { isYou } from '../chat/roles';
 import { cleanSpeech } from '../format';
@@ -132,7 +132,8 @@ ${LANGUAGE_RULE[lang]} Everything the reader sees (narration, dialogue and choic
 
 # OUTPUT FORMAT
 Reply with ONE JSON object and nothing else, no markdown fences:
-{"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false}
+{"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false,"state":{"scene":{"where":"place","present":["names in the scene"],"doing":"what is happening right now, one short clause"},"characters":[{"name":"","toward_user":"how this character feels about the user's role now, 2 to 6 words","learned":"a new fact this character just learned, or empty"}],"decision":""}}
+- state: always give scene (where, who is present, what is going on). In characters list only the ones (max 3) whose feeling toward the user's role changed or who learned something new in this reply. decision: fill it ONLY when the user's last message committed to a significant story choice (a short sentence), otherwise leave it empty.
 - speech_text: the same content as display_text in the same order, without asterisks, quotation marks, speaker labels (no "Name:"), brackets, emoji or any symbol, written so it sounds natural when read aloud. Only plain words with commas and full stops.
 - choices: give 3 DIFFERENT options that lead to different consequences and relate to what just happened: (1) something the user's role can SAY in their own voice (first person, "main", "mujhe"), (2) a short question to one specific character, (3) an action. Each 4 to 12 words, in the SAME language and script as display_text (Hinglish or Banglish, never English unless the story language is English), never all starting with the same word, never small talk or trivia, never "I will say nothing" filler. Example: "Main pehle uske papa se baat karunga". Use [] when not needed.`;
 }
@@ -212,6 +213,82 @@ function asHistory(m: ChatMessage): LlmMessage | null {
   return { role: 'assistant', content: JSON.stringify({ speaker: m.speaker ?? 'Narrator', display_text: m.text, speech_text: m.speech ?? m.text, choices: [], episode_complete: false }) };
 }
 
+// ---- Live story state: scene, character mood / knowledge, user decisions ----
+const clip = (x: unknown, n: number): string => (typeof x === 'string' ? x.trim().slice(0, n) : '');
+const firstName = (n: string) => n.toLowerCase().trim().split(/\s+/)[0] ?? '';
+
+/** The newest state saved on an AI reply. Works across episodes. Replies that were dropped (regenerate) take their state with them. */
+export function currentState(chat: ChatState): StoryState {
+  for (let i = chat.messages.length - 1; i >= 0; i--) {
+    const st = chat.messages[i].state;
+    if (st) return st;
+  }
+  return {};
+}
+
+/** Validates what the model reported and merges it into the previous state. Unknown names are ignored, lists are capped, repeats are not added twice. */
+export function mergeState(story: Story, prev: StoryState, upd?: StateUpdate, tappedChoice?: string): StoryState {
+  const cast = story.characters.map((c) => c.name);
+  const canon = (n: string) => cast.find((c) => c.toLowerCase() === n.toLowerCase() || firstName(c) === firstName(n));
+  const next: StoryState = { scene: prev.scene, chars: { ...(prev.chars ?? {}) }, decisions: [...(prev.decisions ?? [])] };
+  const sc = upd?.scene;
+  if (sc && (clip(sc.where, 80) || clip(sc.doing, 120))) {
+    const present = Array.isArray(sc.present) ? sc.present.map((n) => canon(clip(n, 30)) ?? '').filter(Boolean) : prev.scene?.present ?? [];
+    next.scene = { where: clip(sc.where, 80) || prev.scene?.where || '', present: Array.from(new Set(present)).slice(0, 6), doing: clip(sc.doing, 120) || prev.scene?.doing || '' };
+  }
+  for (const c of Array.isArray(upd?.characters) ? upd!.characters!.slice(0, 4) : []) {
+    const name = typeof c?.name === 'string' ? canon(clip(c.name, 30)) : undefined;
+    if (!name) continue;
+    const cur = { ...(next.chars![name] ?? {}) };
+    const mood = clip(c.toward_user, 60);
+    if (mood) cur.mood = mood;
+    const learned = clip(c.learned, 120);
+    if (learned) {
+      const knows = (cur.knows ?? []).filter((k) => k.toLowerCase() !== learned.toLowerCase());
+      cur.knows = [...knows, learned].slice(-6);
+    }
+    next.chars![name] = cur;
+  }
+  const dec = [clip(upd?.decision, 140), clip(tappedChoice, 140)].filter(Boolean);
+  for (const d of dec) if (!next.decisions!.some((x) => x.toLowerCase() === d.toLowerCase())) next.decisions!.push(d);
+  next.decisions = next.decisions!.slice(-10);
+  return next;
+}
+
+/** Scene, who feels / knows what, and what the reader decided. Sent with every reply so the story cannot drift. */
+export function stateBlock(st: StoryState): string {
+  const out: string[] = [];
+  if (st.scene?.where || st.scene?.doing) {
+    out.push(`CURRENT SCENE\nWhere: ${st.scene.where || '(unknown)'}\nPresent: ${st.scene.present.join(', ') || '(unknown)'}\nHappening: ${st.scene.doing || '(unknown)'}\nContinue from here. Do not move the scene unless something in the story makes it move.`);
+  }
+  const chars = Object.entries(st.chars ?? {}).filter(([, v]) => v.mood || v.knows?.length);
+  if (chars.length) {
+    out.push(`CHARACTER STATE (stay consistent with it)\n${chars.map(([n, v]) => `- ${n}${v.mood ? `: feels ${v.mood} toward the user's role` : ''}${v.knows?.length ? `; knows: ${v.knows.join(' | ')}` : ''}`).join('\n')}`);
+  }
+  if (st.decisions?.length) {
+    out.push(`DECISIONS THE USER ALREADY MADE (follow them, never contradict or undo them)\n${st.decisions.map((d) => `- ${d}`).join('\n')}`);
+  }
+  return out.join('\n\n');
+}
+
+/** Picks 1 to 3 characters who should speak now: the ones named by the user, the ones who just spoke, the ones in the scene. */
+export function pickSpeakers(story: Story, chat: ChatState, userText: string, history: ChatMessage[], st: StoryState): string[] {
+  const others = story.characters.map((c) => c.name).filter((n) => n !== chat.userRole);
+  const text = ` ${userText.toLowerCase()} `;
+  const lastAi = history.filter((m) => m.role === 'ai').slice(-3).reverse();
+  const score = (name: string) => {
+    const fn = firstName(name);
+    let v = 0;
+    if (fn.length > 1 && new RegExp(`[^a-z0-9]${fn.replace(/[^a-z0-9]/g, '')}[^a-z0-9]`).test(text)) v += 10;
+    lastAi.forEach((m, i) => { if (new RegExp(`(^|\\n)${fn}[^:\\n]{0,20}:\\s*["\\u201C]`, 'i').test(m.text)) v += 3 - i; });
+    if (st.scene?.present.some((p) => firstName(p) === fn)) v += 4;
+    if (story.characters.find((c) => c.name === name)?.relationshipToUser) v += 0.5;
+    return v;
+  };
+  return others.map((n, i) => ({ n, v: score(n), i })).sort((a, b) => b.v - a.v || a.i - b.i).slice(0, 3).map((x) => x.n);
+}
+
+
 export type TurnMode = 'turn' | 'begin' | 'close' | 'advance';
 
 function rolesBlock(story: Story, chat: ChatState): string {
@@ -284,14 +361,16 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
   const limit = story.messageLimit ?? DEFAULT_MESSAGE_LIMIT;
   const direction = [`CURRENT EPISODE: ${chat.ep}`, `Goal: ${goal}`, `Messages used: ${chat.epCount} of ${limit}`, pacingNote(story, chat, limit)].join('\n');
 
+  const st = currentState(chat);
   const notes: string[] = [];
   if (!chat.userRole && chat.character) notes.push(`The user is currently talking to ${chat.character}.`);
   if (mode === 'begin') {
+    if (chat.ep === 1) notes.push('Open like the first scene of a series: first narration paragraph places the user\'s role (where they are, what just happened). Second narration paragraph shows who is in the room and what each person is doing, one short clause each, at most 3 people. Then two different characters speak to the user\'s role in their own voices. Fill state.scene with the place and who is present.');
     notes.push(chat.ep === 1
       ? 'Begin episode 1 now. Set the scene and introduce the first character. Do not wait for the user.'
       : `Begin episode ${chat.ep} now. Open directly from the suspense hook the previous episode ended on.`);
   }
-  if (mode === 'turn') notes.push(`The user's role just said or did exactly this: \"${finalUser.replace(/\"/g, "'")}\". The first paragraph of your reply must react to it directly. Do NOT repeat, rephrase or restart your previous reply or the opening scene. Move the scene a little forward in time with something new. Follow ADAPTIVE BEHAVIOR: if the user asked a character something, that character answers first in their own line. Use one or two speakers from the story bible, at least two spoken lines, and the ending named in the stage note.`);
+  if (mode === 'turn') notes.push(`Speakers for this reply: ${pickSpeakers(story, chat, finalUser, history, st).join(', ') || 'the story\'s characters'}. Choose 1 to 3 of them. The first one answers or reacts to the user directly. The others stay silent unless the scene needs them. The user's role just said or did exactly this: \"${finalUser.replace(/\"/g, "'")}\". The first paragraph of your reply must react to it directly. Do NOT repeat, rephrase or restart your previous reply or the opening scene. Move the scene a little forward in time with something new. Follow ADAPTIVE BEHAVIOR: if the user asked a character something, that character answers first in their own line. Use one or two speakers from the story bible, at least two spoken lines, and the ending named in the stage note.`);
   if (endedWithQuestion(history)) notes.push('Your previous reply ended with a question. Do NOT end this reply with a question, and do not ask anything similar again.');
   notes.push(LANG_NOTE[story.language]);
   if (mode === 'advance') notes.push('The user tapped Next without writing anything. Continue the scene with the next story beat: the other characters act and speak, the plot moves one step. Write nothing for the user\'s role.');
@@ -304,7 +383,7 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
 
   return [
     { role: 'system', content: masterPrompt(story.language) + brainBlock(story.language) },
-    { role: 'system', content: `${storyBible(story)}\n\n${rolesBlock(story, chat)}\n\n${memoryBlock(chat, finalUser)}\n\n${direction}` },
+    { role: 'system', content: [storyBible(story), rolesBlock(story, chat), memoryBlock(chat, finalUser), stateBlock(st), direction].filter(Boolean).join('\n\n') },
     ...hist,
     { role: 'user', content: last },
   ];
@@ -326,6 +405,7 @@ export interface Reply {
   speech_text: string;
   choices: string[];
   episode_complete: boolean;
+  state?: StateUpdate;
 }
 
 /**
@@ -449,6 +529,7 @@ export function parseReply(raw: string): Reply | null {
       speech_text: cleanSpeech(typeof j.speech_text === 'string' && j.speech_text.trim() ? j.speech_text : display) || display.replace(/\*/g, ''),
       choices: Array.isArray(j.choices) ? j.choices.filter((c: unknown) => typeof c === 'string' && c.trim()).slice(0, 3) : [],
       episode_complete: j.episode_complete === true,
+      state: j.state && typeof j.state === 'object' ? (j.state as StateUpdate) : undefined,
     };
   } catch {
     return null;

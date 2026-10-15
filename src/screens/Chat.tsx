@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RichText } from '../components/RichText';
 import { TypingDots } from '../components/TypingDots';
 import { VoiceChip } from '../components/VoiceChip';
+import { StoryIntro } from '../components/StoryIntro';
 import { GradientButton } from '../components/Ui';
 import { colors, radius, space } from '../theme';
 import { ChatMessage, ChatState, GENDER_LABEL, Gender, Story } from '../types';
@@ -334,6 +335,7 @@ export default function Chat() {
             keyboardDismissMode="interactive"
             contentContainerStyle={{ paddingHorizontal: space.screen, paddingTop: space.section, paddingBottom: space.section, gap: 22, flexGrow: 1 }}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+            ListHeaderComponent={<StoryIntro story={story} myRole={myRole} />}
             ListFooterComponent={
               <View>
                 {busy ? <TypingDots /> : null}

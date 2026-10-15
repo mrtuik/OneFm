@@ -1,6 +1,6 @@
 import { ChatMessage, ChatState, Story } from '../types';
 import { ProviderError, ProviderSettings, chatCompletion } from '../ai/provider';
-import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, parseReply, qualityIssue, replyContext, similarity } from '../ai/prompts';
+import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, currentState, mergeState, parseReply, qualityIssue, replyContext, similarity } from '../ai/prompts';
 import { withRoleInfo } from './roles';
 import { runMemoryPipeline } from '../ai/memory';
 import { ensureLanguage } from '../ai/language';
@@ -111,9 +111,13 @@ export async function takeTurn(storyIn: Story, start: ChatState, opts: TurnOptio
 
   const reply = await askModel(story, chat, finalUser, history, mode, cfg, key);
 
+  // Story state after this reply. It lives on the reply itself, so regenerating (which drops the reply) never duplicates events.
+  const prevAi = [...history].reverse().find((m) => m.role === 'ai');
+  const tapped = mode === 'turn' && prevAi?.choices?.includes(finalUser) ? finalUser : undefined;
+  const state = mergeState(story, currentState(chat), reply.state, tapped);
   const ai: ChatMessage = {
     id: mid(), role: 'ai', speaker: reply.speaker, text: reply.display_text, speech: reply.speech_text,
-    choices: reply.choices, ep: chat.ep, createdAt: Date.now(),
+    choices: reply.choices, state, ep: chat.ep, createdAt: Date.now(),
   };
   epCount += 1;
   push({ ...chat, messages: [...chat.messages, ai], epCount });
