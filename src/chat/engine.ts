@@ -1,6 +1,6 @@
 import { ChatMessage, ChatState, Story } from '../types';
 import { ProviderError, ProviderSettings, chatCompletion } from '../ai/provider';
-import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, parseReply, similarity } from '../ai/prompts';
+import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, parseReply, qualityIssue, similarity } from '../ai/prompts';
 import { withRoleInfo } from './roles';
 import { runMemoryPipeline } from '../ai/memory';
 import { ensureLanguage } from '../ai/language';
@@ -32,17 +32,22 @@ async function askModel(story: Story, chat: ChatState, finalUser: string, histor
   const recent = history.filter((m) => m.role === 'ai').slice(-2).map((m) => m.text);
   let lastRaw = '';
   let messages = base;
-  // Structured reply. If parsing fails or the reply repeats, retry (up to 3 tries), then show what we have.
+  // Structured reply. If parsing fails, the reply repeats an earlier one, or it does not follow the blueprint
+  // (narration + labelled dialogue, enough length, concrete), retry (up to 3 tries), then show the best we have.
   let fallback: Reply | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
-    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 1000, temperature: attempt === 0 ? TEMP.chat : Math.min(1, TEMP.chat + 0.1) });
+    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 1600, temperature: attempt === 0 ? TEMP.chat : Math.min(1, TEMP.chat + 0.1) });
     const parsed = parseReply(lastRaw);
     if (!parsed) continue;
     const repeated = mode !== 'begin' && recent.some((t) => similarity(parsed.display_text, t) >= REPEAT_LIMIT);
-    if (!repeated) return { ...parsed, display_text: await ensureLanguage(story.language, parsed.display_text, cfg, key) };
-    fallback = parsed;
+    const issue = mode === 'close' ? null : qualityIssue(parsed.display_text);
+    if (!repeated && !issue) return { ...parsed, display_text: await ensureLanguage(story.language, parsed.display_text, cfg, key) };
+    if (!repeated || !fallback) fallback = parsed; // keep a reply that is only weak over one that repeats
     const last = base[base.length - 1];
-    messages = [...base.slice(0, -1), { ...last, content: `${last.content}\n\n[Your previous attempt repeated an earlier reply. Write a completely different reply that answers the user's message first and adds something new. Do not reuse the earlier opening line or scene description.]` }];
+    const note = repeated
+      ? 'Your previous attempt repeated an earlier reply. Write a completely different reply that answers the user\'s message first and adds something new. Do not reuse the earlier opening line or scene description.'
+      : `Your previous attempt was rejected because ${issue}. Write it again and follow the REPLY BLUEPRINT exactly: narration paragraphs in asterisks, dialogue lines written as Name: "words" from at least two characters, 140 to 240 words, concrete details, and a last line that speaks to the user's role.`;
+    messages = [...base.slice(0, -1), { ...last, content: `${last.content}\n\n[${note}]` }];
   }
   if (fallback) return { ...fallback, display_text: await ensureLanguage(story.language, fallback.display_text, cfg, key) };
   const plain = lastRaw.trim();

@@ -1,5 +1,13 @@
 # One Fm changelog
 
+## V6.9.25
+- Story replies rewritten for a real web-series feel (prompts.ts, engine.ts; no screen or design change):
+  - Every reply is one "chat beat": narration in italics, then dialogue from at least two characters (side characters may cut in), ending with a line that speaks straight to the reader. 140 to 240 words.
+  - Real talk: short spoken lines, teasing, fillers, each character in their own voice. Direct questions get a concrete answer (name, place, year, object) and no vague mystery lines.
+  - Pacing for long stories: the app tells the AI the stage of the episode (opening, middle, rising, closing) and the main plot beat to play now, from messages used divided by the message limit. Works for episodes of 40 or 1000+ messages; set `messageLimit` on a story to change its length.
+  - A reply that has no dialogue or no narration, is too short, repeats, or uses stock lines is rejected and written again (up to 3 tries).
+  - Reply size limit raised from 1000 to 1600 tokens.
+
 ## V6.9.24
 - Chats are now kept per account on the phone. Signing in with another account on the same phone shows that account's own chats (still local only, nothing goes to Firebase). Chats from before this update go to the first account that opens the app after updating.
 - Chats tab shows the story thumbnail (the real picture, including ones changed by the developer) instead of a plain icon.
