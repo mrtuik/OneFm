@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { Empty } from '../components/Ui';
 import { colors, radius, space } from '../theme';
 import { ChatState, GENRES, Story } from '../types';
 import { listChats } from '../chat/store';
-import { fetchStories } from '../firebase/db';
+import { fetchStories, storiesVersion } from '../firebase/db';
 import { useSettings } from '../state/settings';
 
 interface Row { title: string; icon?: React.ComponentProps<typeof Ionicons>['name']; items: Story[]; badges?: Record<string, string>; subs?: Record<string, string>; onSeeAll?: () => void }
@@ -41,7 +41,12 @@ export default function Home() {
 
   const load = useCallback(async () => setStories(await fetchStories()), []);
   useEffect(() => { load(); }, [load]);
-  useFocusEffect(useCallback(() => { listChats().then(setChats); }, []));
+  // Reload the stories when the developer just edited one (thumbnail or name).
+  const seenVersion = useRef(0);
+  useFocusEffect(useCallback(() => {
+    listChats().then(setChats);
+    if (seenVersion.current !== storiesVersion()) { seenVersion.current = storiesVersion(); load(); }
+  }, [load]));
 
   const open = (story: Story) => nav.navigate('StoryDetail', { story });
   const seeAll = (title: string, items: Story[], ranked?: boolean) => nav.navigate('SeeAll', { title, stories: items, ranked });

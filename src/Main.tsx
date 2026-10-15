@@ -17,6 +17,7 @@ import Community from './screens/Community';
 import CreatePost from './screens/CreatePost';
 import UserProfile from './screens/UserProfile';
 import EditProfile from './screens/EditProfile';
+import EditStory from './screens/EditStory';
 import SeeAll from './screens/SeeAll';
 import Brain from './screens/Brain';
 import { Chats } from './screens/Chats';
@@ -117,6 +118,7 @@ function Root() {
         <Stack.Screen name="UserProfile" component={UserProfile} options={{ title: 'Profile' }} />
         <Stack.Screen name="SeeAll" component={SeeAll} options={({ route }: any) => ({ title: route.params?.title ?? 'Stories' })} />
         <Stack.Screen name="EditProfile" component={EditProfile} options={{ title: 'Edit profile' }} />
+        <Stack.Screen name="EditStory" component={EditStory} options={{ title: 'Edit story' }} />
         <Stack.Screen name="Brain" component={Brain} options={{ title: 'Story brain' }} />
       </Stack.Navigator>
     </NavigationContainer>

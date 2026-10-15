@@ -1,5 +1,10 @@
 # One Fm changelog
 
+## V6.9.22
+- Developer edit: on every story page the developer account (xrdk95@gmail.com) sees an edit icon left of Share. It opens an Edit story page: change the thumbnail (gallery picture, saved in the cloud database), the story name, the pink word, the short description and every episode name. Episode names now show on the story page ("Episode 1: Brishtir Dorja").
+- Edits are saved under `storyEdits/<id>` (built-in stories) or inside the post (community stories), so every reader sees them. "Reset to original" is on the page for built-in stories.
+- If you use database.rules.locked.json, publish it again: it now has a `storyEdits` rule (admin write only).
+
 ## V6.9.21
 - Voice is much louder: loudness is now set by RMS (target about a loud song at full volume) with a soft limiter, plus Android LoudnessEnhancer (+6 dB). Tune `TARGET_RMS` and `ENHANCER_GAIN_MB` at the top of OneFmVoiceModule.kt.
 - Numbers in Bangla voice text are read as words (25 -> পঁচিশ, 2024, 10:30, 3.5, 1,50,000, phone numbers digit by digit).

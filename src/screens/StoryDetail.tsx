@@ -12,7 +12,7 @@ import { colors, poster, radius, space } from '../theme';
 import { ChatState, LANG_LABEL, Story } from '../types';
 import { loadChat } from '../chat/store';
 import { isLiked, setLiked } from '../firebase/db';
-import { isPostLiked, setPostLiked } from '../firebase/community';
+import { isAdmin, isPostLiked, setPostLiked } from '../firebase/community';
 import { getAuth } from '@react-native-firebase/auth';
 
 type Tab = 'episodes' | 'details';
@@ -27,16 +27,21 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function StoryDetail() {
-  const { story, postId, isPrivate } = useRoute<any>().params as { story: Story; postId?: string; isPrivate?: boolean };
+  const route = useRoute<any>();
+  const { story, postId, isPrivate } = route.params as { story: Story; postId?: string; isPrivate?: boolean };
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<Tab>('episodes');
   const [chat, setChat] = useState<ChatState | null>(null);
   const [liked, setLikedState] = useState(false);
   const [likes, setLikes] = useState(story.likeCount);
+  const [admin, setAdmin] = useState(false);
 
   useFocusEffect(useCallback(() => { loadChat(story.id).then(setChat); }, [story.id]));
   useEffect(() => { if (isPrivate) return; (postId ? isPostLiked(postId) : isLiked(story.id)).then(setLikedState); }, [story.id, postId, isPrivate]);
+
+  // Only the developer account (admin) gets the edit icon.
+  useFocusEffect(useCallback(() => { isAdmin(getAuth().currentUser?.uid).then(setAdmin); }, []));
 
   const started = !!chat && chat.messages.length > 0;
   const currentEp = started ? chat!.ep : 1;
@@ -54,6 +59,8 @@ export default function StoryDetail() {
       Alert.alert('Could not update', String(e?.message ?? e));
     }
   };
+
+  const edit = () => nav.navigate('EditStory', { story, postId, detailKey: route.key });
 
   const share = () => Share.share({ message: `${story.title} on One Fm: ${story.logline}` }).catch(() => {});
 
@@ -138,7 +145,7 @@ export default function StoryDetail() {
                       <Text style={[s.epNumText, current && { color: colors.onAccent }]}>{n}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.itemTitle}>Episode {n}</Text>
+                      <Text style={s.itemTitle}>{e.title ? `Episode ${n}: ${e.title}` : `Episode ${n}`}</Text>
                       <Text style={s.itemSub}>{e.goal}</Text>
                     </View>
                     <Ionicons name={done ? 'checkmark-circle' : current ? 'play-circle' : 'play-circle-outline'} size={26} color={done || current ? colors.accent : colors.sub} />
@@ -171,7 +178,12 @@ export default function StoryDetail() {
 
       <View style={[s.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
         <Pressable onPress={() => nav.goBack()} style={s.round} hitSlop={8} accessibilityLabel="Back"><Ionicons name="arrow-back" size={22} color={colors.text} /></Pressable>
-        <Pressable onPress={share} style={s.round} hitSlop={8} accessibilityLabel="Share"><Ionicons name="share-outline" size={22} color={colors.text} /></Pressable>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {admin && !isPrivate ? (
+            <Pressable onPress={edit} style={s.round} hitSlop={8} accessibilityLabel="Edit story"><Ionicons name="create-outline" size={22} color={colors.text} /></Pressable>
+          ) : null}
+          <Pressable onPress={share} style={s.round} hitSlop={8} accessibilityLabel="Share"><Ionicons name="share-outline" size={22} color={colors.text} /></Pressable>
+        </View>
       </View>
     </View>
   );
