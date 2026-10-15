@@ -1,5 +1,14 @@
 # One Fm changelog
 
+## V14 (1.2.2)
+- Search list cards redesigned (StoryCard row, also used by the post preview): the cover sits on a rounded plate tinted with the story's own two colors; genre tags are glued to the top right corner of the card (first tag pink, a second one dark); the small chat-with icon (smile bubble from the Chats tab) is at the bottom right of every card. Plate size: `rowPlate` in theme.ts. The old play button on the other card styles is now the same chat icon.
+- Story replies (prompts.ts):
+  - A very short or hesitant message ("hmm", "kuch nahi", "ok", "...") is now noticed: one character reacts to the mood (`isHesitant`, plus a director note).
+  - When two characters speak they contrast: one provokes, the other defends or reacts differently.
+  - Small beat rhythm: narration, spoken line, micro-reaction, spoken line.
+  - Now and then a reply may end on a dilemma with two options and a cost, never right after a reply that ended with a question.
+- Engine tests: 12 pass (`npm run test:engine`).
+
 ## V6.9.25
 - Story replies rewritten for a real web-series feel (prompts.ts, engine.ts; no screen or design change):
   - Every reply is one "chat beat": narration in italics, then dialogue from at least two characters (side characters may cut in), ending with a line that speaks straight to the reader. 140 to 240 words.

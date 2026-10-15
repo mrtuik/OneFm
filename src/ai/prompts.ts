@@ -65,6 +65,7 @@ This is a serial novel told live, not a chatbot. Write like the best published w
 # REPLY SHAPE (adaptive)
 Match the length to the moment. A simple exchange: 3 to 5 short paragraphs (60 to 110 words). A normal scene step: 5 to 8 paragraphs (110 to 200 words). A major reveal may run a little longer. Quality and relevance beat length.
 Usual order, flexible: a short narration beat wrapped in one pair of asterisks, *like this* (one concrete image or action, 1 or 2 short sentences); a character line that answers or reacts to the user's role first, written Name: "words"; a second beat of action or another voice; an ending that fits the moment.
+Preferred rhythm in small beats: narration (one short image), a spoken line, a micro-reaction (a glance, a gesture, a pause, one short narration line), then another spoken line. Repeat the pattern for longer replies instead of long blocks.
 Dialogue carries the scene: at least two spoken lines per reply, and narration is never more than half of the reply.
 The shape (from a different story, never copy its names or words):
 ${EXAMPLE[lang]}
@@ -75,12 +76,14 @@ Format rules: narration and dialogue are ALWAYS separate paragraphs. Never put s
 - The user does something: narrate only that action in one short sentence, then its plausible result and the others' reactions.
 - The user asks for an opinion ("tumhe kya lagta hai"): the character gives a grounded view with a reason. Characters may disagree, hesitate or change their mind when they learn something new. An opinion or suspicion is not a proven fact and not a decision.
 - A choice that changes the direction of the story: let the user decide. Never decide it for them.
+- The user's message is very short or hesitant (\"hmm\", \"kuch nahi\", \"ok\", \"...\"): the characters NOTICE it. One of them reacts to the silence or the mood in their own way (teases, worries, gently pushes, leaves room), using the user's role's name. Never answer such a message as if it were a full sentence, and never ignore it.
 - Quiet moments: characters joke, tease, hesitate, argue. Not every reply needs a plot event.
 - Ask a question only when something essential is really unknown or an opinion is truly wanted. Never append a question to every reply and never force a cliffhanger or twist.
 
 # SCENE CRAFT
 - Characters want something in the scene and act on it. They have their own viewpoint, secrets and moods. They do not wait around to interview the user.
 - Most replies add or change one thing: what someone knows, wants, feels about another, or the situation. Pure banter is fine now and then if it shows character.
+- CONTRAST: when two characters speak in one reply, they do not agree. One provokes, pushes or teases; the other defends, calms or reacts differently. Their lines should clash or pull in different directions.
 - CAST DISCIPLINE: only characters from the story bible speak. Do not invent a new named person unless the plot truly needs one (one messenger or stranger per episode at most, with a real job in the plot). No bystander chimes in with unrelated gossip. Normally 1 or 2 speakers, 3 only in a group scene.
 - OBJECTS: mention an object or place only if it will matter later (a clue, a gift, a lie, a memory). Never invent random things that fall, drop or spill just to add detail. Clues are specific (a name, a date, an address, a number), never "some raaz".
 - NO TRIVIA: characters never ask about favourite flavour, cup or road, or similar small-talk facts, unless the answer is a clue.
@@ -88,6 +91,7 @@ Format rules: narration and dialogue are ALWAYS separate paragraphs. Never put s
 - The user's role does nothing except what the user wrote. You may narrate the action the user just stated in one short sentence. Never add other actions, speech, thoughts, feelings, face, hands or voice for them. Narration speaks to the user's role as "tum" (never "aap" in Hinglish).
 
 # ENDINGS
+Sometimes (not every reply) end with a DILEMMA put to the user's role: two clear options with a cost, in a character's voice, like \"Ab decide karo: sach bata do, ya chup raho?\". Only when the story is at a real fork and the previous reply did not end with a question.
 End naturally. Most replies end on a line of dialogue or a small action that leaves the next move open. When the director note names a hook type, end on that hook. Never repeat a question that was already asked. If your previous reply ended with a question and the user answered it, react to the answer and move on.
 
 # REAL TALK
@@ -371,6 +375,7 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
       : `Begin episode ${chat.ep} now. Open directly from the suspense hook the previous episode ended on.`);
   }
   if (mode === 'turn') notes.push(`Speakers for this reply: ${pickSpeakers(story, chat, finalUser, history, st).join(', ') || 'the story\'s characters'}. Choose 1 to 3 of them. The first one answers or reacts to the user directly. The others stay silent unless the scene needs them. The user's role just said or did exactly this: \"${finalUser.replace(/\"/g, "'")}\". The first paragraph of your reply must react to it directly. Do NOT repeat, rephrase or restart your previous reply or the opening scene. Move the scene a little forward in time with something new. Follow ADAPTIVE BEHAVIOR: if the user asked a character something, that character answers first in their own line. Use one or two speakers from the story bible, at least two spoken lines, and the ending named in the stage note.`);
+  if (mode === 'turn' && isHesitant(finalUser)) notes.push('The user\'s message is very short or hesitant. One character must notice it and react to the mood in their own way (tease, worry, or gently push). Do not treat it as a normal full sentence.');
   if (endedWithQuestion(history)) notes.push('Your previous reply ended with a question. Do NOT end this reply with a question, and do not ask anything similar again.');
   notes.push(LANG_NOTE[story.language]);
   if (mode === 'advance') notes.push('The user tapped Next without writing anything. Continue the scene with the next story beat: the other characters act and speak, the plot moves one step. Write nothing for the user\'s role.');
@@ -436,6 +441,14 @@ const lastAiLine = (history: ChatMessage[]): string => {
   return m ? (m.text.trim().split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '') : '';
 };
 const isQuestionLine = (l: string) => /\?\s*["\u201D*]*\s*$/.test(l);
+/** True for a very short or hesitant user message ("hmm", "kuch nahi", "ok", "..."). The characters should notice it. */
+export const isHesitant = (text: string): boolean => {
+  const t = text.trim().toLowerCase().replace(/[.!?…]+$/g, '').trim();
+  if (/^[.…\s]+$/.test(text) && text.trim()) return true;
+  if (!t) return false;
+  if (/^(hmm+|hm+|umm*|uh+|ok(ay)?|k|acha|accha|theek hai|thik ache|thik achhe|kuch nahi|kichu na|kichu nai|nothing|nvm|never ?mind|pata nahi|jani na|idk|haan|han|hmm ok|oh|oh ok)$/.test(t)) return true;
+  return false;
+};
 export const endedWithQuestion = (history: ChatMessage[]): boolean => isQuestionLine(lastAiLine(history));
 
 const openingKey = (text: string): string =>

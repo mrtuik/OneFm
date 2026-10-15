@@ -106,4 +106,16 @@ test('quality: weak replies from the screenshots are rejected, a good one passes
   assert.ok(P.qualityIssue('*Aanya cup rakhti hai.*' + body.replace('Kabir', 'Rohan'), ctx), 'stranger');
   assert.strictEqual(P.qualityIssue('*Aanya cup rakhti hai, steel ka glass khanakta hai.*' + body, ctx), null);
 });
+test('hesitant input: short replies are detected, real sentences are not', () => {
+  for (const x of ['hmm', 'Hmm...', 'kuch nahi', 'ok', '...', 'idk', 'kichu na']) assert.ok(P.isHesitant(x), x);
+  for (const x of ['ask her', 'Siddharth se poochho kaun hai woh', 'main chai pilunga', '']) assert.ok(!P.isHesitant(x), x);
+  const m = P.buildTurnMessages(story, chatBase, 'hmm', [], 'turn');
+  assert.ok(JSON.stringify(m).includes('One character must notice it'));
+  const m2 = P.buildTurnMessages(story, chatBase, 'Kabir se poochho woh kahan gaya', [], 'turn');
+  assert.ok(!JSON.stringify(m2).includes('One character must notice it'));
+});
+test('system prompt has contrast, micro-beat and dilemma rules', () => {
+  const sys = P.masterPrompt('hi');
+  assert.ok(/CONTRAST/.test(sys) && /micro-reaction/.test(sys) && /DILEMMA/.test(sys) && /hesitant/.test(sys));
+});
 console.log(`\n${n} tests passed`);

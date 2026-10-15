@@ -24,6 +24,7 @@ export const poster = {
   wideRatio: 16 / 10, // hero card and story detail
   tileWidth: 176, // horizontal rows, cover is square
   rowSize: 104, // search results, cover is square
+  rowPlate: 108, // search results: tinted plate the cover sits on
   detailSize: 220, // story detail poster, square
 };
 

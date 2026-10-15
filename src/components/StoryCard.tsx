@@ -1,10 +1,11 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { colors, poster, radius, space } from '../theme';
 import { Story } from '../types';
 import { Cover } from './Cover';
 import { GENRE_ICON } from './genreIcon';
+import { GradientView } from './GradientView';
+import { ChatIcon } from './Icons';
 
 export { GENRE_ICON };
 
@@ -20,6 +21,15 @@ export function StoryTitle({ story, style }: { story: Story; style?: object }) {
   );
 }
 
+/** Small round "chat with" button (the smile bubble from the Chats tab). Bottom right of every card. */
+function ChatButton({ size = 34, style }: { size?: number; style?: object }) {
+  return (
+    <View style={[s.play, { width: size, height: size, borderRadius: size / 2 }, style]}>
+      <ChatIcon size={Math.round(size * 0.5)} color={colors.onAccent} cut={colors.accent} />
+    </View>
+  );
+}
+
 /** hero = wide poster, tile = square poster in a horizontal row, row = small square poster in a list */
 export type CardVariant = 'hero' | 'tile' | 'row';
 interface Props { story: Story; onPress: () => void; onLongPress?: () => void; variant?: CardVariant; label?: string }
@@ -28,14 +38,28 @@ export function StoryCard({ story, onPress, onLongPress, variant = 'tile', label
   const meta = `${story.episodes.length} episodes, ${story.readMin} min each`;
 
   if (variant === 'row') {
+    const tags = story.genres.slice(0, 2);
     return (
       <Pressable onPress={onPress} onLongPress={onLongPress} style={({ pressed }) => [s.card, s.rowCard, { opacity: pressed ? 0.9 : 1 }]}>
-        <Cover story={story} iconSize={36} style={s.rowCover} />
+        {/* Cover sits on a plate tinted with the story's own colors. */}
+        <GradientView from={story.cover[0]} to={story.cover[1]} fromOpacity={0.55} toOpacity={0.2} diagonal style={s.plate}>
+          <Cover story={story} iconSize={30} style={s.rowCover} />
+        </GradientView>
         <View style={s.rowBody}>
-          <Text style={s.genre}>{story.genres[0]}</Text>
           <StoryTitle story={story} style={s.tileTitle} />
           <Text style={s.logline} numberOfLines={2}>{story.logline}</Text>
-          <Text style={s.meta} numberOfLines={1}>{meta}</Text>
+          <View style={s.bottom}>
+            <Text style={s.meta} numberOfLines={1}>{meta}</Text>
+            <ChatButton size={32} />
+          </View>
+        </View>
+        {/* Tags are glued to the top right corner of the card. */}
+        <View style={s.tags} pointerEvents="none">
+          {tags.map((g, i) => (
+            <View key={g} style={[s.tag, i === 0 ? s.tagMain : s.tagSub, i === tags.length - 1 && s.tagLast]}>
+              <Text style={[s.tagText, i > 0 && { color: colors.text }]}>{g.toUpperCase()}</Text>
+            </View>
+          ))}
         </View>
       </Pressable>
     );
@@ -50,7 +74,7 @@ export function StoryCard({ story, onPress, onLongPress, variant = 'tile', label
           {label ? <View style={[s.badge, { backgroundColor: colors.accent }]}><Text style={[s.badgeText, { color: colors.onAccent }]}>{label}</Text></View> : null}
         </View>
         {hero ? null : (
-          <View style={[s.play, s.playOnCover]}><Ionicons name="play" size={14} color={colors.onAccent} style={{ marginLeft: 2 }} /></View>
+          <ChatButton size={32} style={s.playOnCover} />
         )}
       </Cover>
       <View style={s.body}>
@@ -58,7 +82,7 @@ export function StoryCard({ story, onPress, onLongPress, variant = 'tile', label
         <Text style={s.logline} numberOfLines={2}>{story.logline}</Text>
         <View style={s.bottom}>
           <Text style={s.meta} numberOfLines={1}>{meta}</Text>
-          {hero ? <View style={s.play}><Ionicons name="play" size={16} color={colors.onAccent} style={{ marginLeft: 2 }} /></View> : null}
+          {hero ? <ChatButton size={36} /> : null}
         </View>
       </View>
     </Pressable>
@@ -77,10 +101,16 @@ const s = StyleSheet.create({
   logline: { color: colors.sub, fontSize: 13, lineHeight: 18, minHeight: 36 },
   bottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 20 },
   meta: { color: colors.sub, fontSize: 12, flex: 1, paddingRight: 8 },
-  genre: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   play: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   playOnCover: { position: 'absolute', right: 12, bottom: 12, width: 32, height: 32, borderRadius: 16 },
-  rowCard: { flexDirection: 'row', padding: 12, gap: space.gap, alignItems: 'center' },
-  rowCover: { width: poster.rowSize, height: poster.rowSize, borderRadius: radius.inner },
-  rowBody: { flex: 1, gap: 4 },
+  rowCard: { flexDirection: 'row', padding: 10, gap: space.gap, alignItems: 'stretch' },
+  plate: { width: poster.rowPlate, height: poster.rowPlate, borderRadius: radius.inner, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  rowCover: { width: poster.rowPlate - 24, height: poster.rowPlate - 24, borderRadius: radius.inner },
+  rowBody: { flex: 1, gap: 4, paddingTop: 22, paddingRight: 2, justifyContent: 'space-between' },
+  tags: { position: 'absolute', top: 0, right: 0, flexDirection: 'row' },
+  tag: { paddingHorizontal: 10, paddingVertical: 5 },
+  tagMain: { backgroundColor: colors.accent },
+  tagSub: { backgroundColor: '#2A2323' },
+  tagLast: { borderTopRightRadius: radius.card, borderBottomLeftRadius: radius.inner + 2 },
+  tagText: { color: colors.onAccent, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
 });
