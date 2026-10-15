@@ -5,6 +5,8 @@ import { Cover } from './Cover';
 import { compact } from '../format';
 import { colors, radius, space } from '../theme';
 import { Story } from '../types';
+import Svg, { G, Path } from 'react-native-svg';
+import { RANK_DIGITS } from './rankDigits';
 
 /** Looks like a search field. Tapping it opens the Search tab. */
 export function SearchBar({ onPress }: { onPress: () => void }) {
@@ -63,15 +65,38 @@ export function MiniTile({ story, onPress, badge, sub }: { story: Story; onPress
   );
 }
 
-/** Width of the big rank number: one digit or two (10). The cover starts right after it, so 10 is never hidden. */
-const rankGap = (rank: number) => String(rank).length * 46 + 6;
+// Rank number: Inter Black digits (drawn as shapes, see rankDigits.ts).
+const RANK_H = 96; // height in px
+const RANK_SPACING = 2; // space between digits of 10
+const RANK_SCALE = RANK_H / 100;
+const rankDigits = (rank: number) => String(rank).split('');
+const rankWidth = (rank: number) => rankDigits(rank).reduce((sum, d, i) => sum + RANK_DIGITS[d].w * RANK_SCALE + (i ? RANK_SPACING : 0), 0);
+/** Space for the big rank number: the cover starts right after it, so 10 is never hidden. */
+const rankGap = (rank: number) => Math.ceil(rankWidth(rank)) + 8;
+
+function RankNumber({ rank }: { rank: number }) {
+  let x = 0;
+  const shapes = rankDigits(rank).map((d, i) => {
+    const g = RANK_DIGITS[d];
+    const node = <G key={i} transform={[{ translateX: x / RANK_SCALE }]}><Path d={g.d} fill={RANK_COLOR} /></G>;
+    x += g.w * RANK_SCALE + RANK_SPACING;
+    return node;
+  });
+  const w = Math.ceil(rankWidth(rank));
+  return (
+    <Svg width={w} height={RANK_H} viewBox={`0 0 ${w / RANK_SCALE} 100`} style={s.rankNum}>
+      {shapes}
+    </Svg>
+  );
+}
+const RANK_COLOR = 'rgba(254,244,244,0.30)';
 
 /** Trending story with a big rank number (1, 2, 3... 10) behind the cover and the plays underneath. */
 export function RankedTile({ story, rank, onPress }: { story: Story; rank: number; onPress: () => void }) {
   const gap = rankGap(rank);
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [s.rank, { width: gap + 124, opacity: pressed ? 0.85 : 1 }]}>
-      <Text style={s.rankNum} allowFontScaling={false} includeFontPadding={false}>{rank}</Text>
+      <RankNumber rank={rank} />
       <View style={{ marginLeft: gap }}>
         <Cover story={story} iconSize={40} style={{ width: 124, height: 124, borderRadius: radius.btn }} />
         <Text style={s.tileTitle} numberOfLines={1}>{story.title}</Text>
@@ -102,6 +127,6 @@ const s = StyleSheet.create({
   tileTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginTop: 8 },
   tileSub: { color: colors.sub, fontSize: 12, marginTop: 2 },
   rank: { justifyContent: 'flex-end' },
-  rankNum: { position: 'absolute', left: 0, bottom: 34, fontSize: 92, lineHeight: 100, fontWeight: '900', letterSpacing: -4, color: 'rgba(254,244,244,0.28)' },
+  rankNum: { position: 'absolute', left: 0, bottom: 34 },
   playsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
 });

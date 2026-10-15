@@ -1,5 +1,8 @@
 # One Fm changelog
 
+## V6.9.23
+- Trending Now rank numbers (1, 2, 3 ... 10) now use the Inter font (Black). They are drawn as shapes (rankDigits.ts), so no font file has to be loaded. Size and colour: `RANK_H` and `RANK_COLOR` in HomeParts.tsx.
+
 ## V6.9.22
 - Developer edit: on every story page the developer account (xrdk95@gmail.com) sees an edit icon left of Share. It opens an Edit story page: change the thumbnail (gallery picture, saved in the cloud database), the story name, the pink word, the short description and every episode name. Episode names now show on the story page ("Episode 1: Brishtir Dorja").
 - Edits are saved under `storyEdits/<id>` (built-in stories) or inside the post (community stories), so every reader sees them. "Reset to original" is on the page for built-in stories.
