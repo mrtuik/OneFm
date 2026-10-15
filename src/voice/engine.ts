@@ -1,6 +1,7 @@
 import * as FS from 'expo-file-system/legacy';
 import { requireNativeModule } from 'expo';
 import { Lang } from '../types';
+import { normalizeSpeech } from '../ai/speechPolish';
 
 /**
  * Voice engine. The app talks only to this file.
@@ -255,12 +256,13 @@ export function stopSpeaking() {
 function cacheKeyOf(voiceId: string, text: string): string {
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
-  return `${voiceId}_v4_${h.toString(36)}_${text.length}`;
+  return `${voiceId}_v5_${h.toString(36)}_${text.length}`;
 }
 
 /** Speaks `text` (native script for Bangla and Hindi). Call downloadVoice first. */
-export function speak(id: string, text: string, lang: Lang, voiceId?: string) {
+export function speak(id: string, rawText: string, lang: Lang, voiceId?: string) {
   const my = ++token;
+  const text = normalizeSpeech(lang, rawText); // numbers to words; ! ? ... marks stay for the native player
   const voice = resolveVoice(lang, voiceId);
   partsRun++;
   callAt = Date.now(); loadMs = 0; firstMs = 0; infoFor = null;

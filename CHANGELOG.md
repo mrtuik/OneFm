@@ -1,5 +1,10 @@
 # One Fm changelog
 
+## V6.9.21
+- Voice is much louder: loudness is now set by RMS (target about a loud song at full volume) with a soft limiter, plus Android LoudnessEnhancer (+6 dB). Tune `TARGET_RMS` and `ENHANCER_GAIN_MB` at the top of OneFmVoiceModule.kt.
+- Numbers in Bangla voice text are read as words (25 -> পঁচিশ, 2024, 10:30, 3.5, 1,50,000, phone numbers digit by digit).
+- Light emotion: sentence endings ! ? ... are kept; excited sentences are faster and louder, hesitant ones slower, softer and followed by a longer pause, questions get a slightly longer pause.
+
 ## V6.9.20
 - Trending Now: the rank numbers no longer touch the next cover (more space between stories), and 10 is fully visible (two digit ranks get more room).
 - See all page redesigned: two column grid of square covers with genre badge, bold title and plays. Trending shows #1, #2... on the covers.

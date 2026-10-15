@@ -6,6 +6,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import android.media.audiofx.LoudnessEnhancer
 import android.os.Build
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
@@ -31,6 +32,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+
+// ---- Loudness settings (change these two to make the voice louder or softer) ----
+// Target loudness (RMS of the voiced parts). 0.22 is close to a loud song at full volume. Lower it if the voice sounds harsh.
+private const val TARGET_RMS = 0.22f
+// Extra boost from Android's LoudnessEnhancer, in millibels (600 = +6 dB). Set 0 to switch it off if a phone crackles.
+private const val ENHANCER_GAIN_MB = 600
 
 /**
  * On-device text to speech with sherpa-onnx (VITS models: Piper, Mimic3, Coqui, MMS).
@@ -139,9 +146,10 @@ class OneFmVoiceModule : Module() {
 
   private class Leveled(val rawPeak: Float, val peak: Float, val rms: Double, val dc: Float, val bad: Int)
 
-  // Cleans and levels one finished message in place: NaN removed, constant offset (DC) removed, quiet voices lifted so that
-  // the loud end sits near 0.5, and anything above 0.8 is rounded off softly instead of being cut flat.
-  private fun levelAudio(a: FloatArray): Leveled {
+  // Cleans and levels one finished piece in place: NaN removed, constant offset (DC) removed, then the voiced part is lifted to
+  // TARGET_RMS (loudness by RMS, not by peak, so every sentence is equally loud and as strong as a mastered song). A soft limiter
+  // rounds off the peaks above 0.6 so nothing is cut flat. `boost` lets an excited sentence be louder and a hesitant one softer.
+  private fun levelAudio(a: FloatArray, boost: Float): Leveled {
     var bad = 0
     var sum = 0.0
     for (i in a.indices) {
@@ -152,17 +160,25 @@ class OneFmVoiceModule : Module() {
     var raw = 0f
     for (v in a) { val av = if (v < 0f) -v else v; if (av > raw) raw = av }
     if (kotlin.math.abs(dc) > 0.0003f) for (i in a.indices) a[i] = a[i] - dc
-    val mags = FloatArray(a.size)
-    for (i in a.indices) mags[i] = if (a[i] < 0f) -a[i] else a[i]
-    java.util.Arrays.sort(mags)
-    val level = if (mags.isEmpty()) 0f else mags[(mags.size * 0.999).toInt().coerceAtMost(mags.size - 1)]
-    val g = if (level >= 0.002f && level < 0.5f) (0.5f / level).coerceAtMost(40f) else 1f
+    var pk = 0f
+    for (v in a) { val av = if (v < 0f) -v else v; if (av > pk) pk = av }
+    var g = 1f
+    if (pk >= 0.002f) {
+      // Only the voiced samples count, so the silence between words does not make the gain too high.
+      val gate = pk * 0.05f
+      var sq0 = 0.0
+      var n = 0
+      for (v in a) { val av = if (v < 0f) -v else v; if (av > gate) { sq0 += (v * v).toDouble(); n++ } }
+      val r = if (n > 0) Math.sqrt(sq0 / n) else 0.0
+      if (r > 0.0005) g = ((TARGET_RMS * boost) / r).toFloat().coerceIn(0.5f, 40f)
+    }
+    val knee = 0.6f
     var peak = 0f
     var sq = 0.0
     for (i in a.indices) {
       val y = a[i] * g
       val ay = if (y < 0f) -y else y
-      val o = if (ay <= 0.8f) y else (if (y < 0f) -1f else 1f) * (0.8f + 0.2f * Math.tanh(((ay - 0.8f) / 0.2f).toDouble()).toFloat())
+      val o = if (ay <= knee) y else (if (y < 0f) -1f else 1f) * (knee + (1f - knee) * Math.tanh(((ay - knee) / (1f - knee)).toDouble()).toFloat())
       a[i] = o
       val ao = if (o < 0f) -o else o
       if (ao > peak) peak = ao
@@ -202,39 +218,54 @@ class OneFmVoiceModule : Module() {
     return built
   }
 
+  // A piece of text with the emotion mark of its sentence: '.' normal, '!' excited, '?' question, '\u2026' hesitant.
+  // The JS side leaves ! ? and ... at the end of a sentence. The voice model itself only gets a plain full stop.
+  private class Piece(val text: String, val mark: Char)
+
+  private fun speedOf(m: Char): Float = when (m) { '!' -> 1.08f; '\u2026' -> 0.9f; else -> 1.0f }
+  private fun loudOf(m: Char): Float = when (m) { '!' -> 1.12f; '\u2026' -> 0.85f; else -> 1.0f }
+
   // Some models hand over the whole text as one block, so the voice would stay silent until everything is
   // generated. Cutting the text into short sentences here makes the first audio ready after the first one.
-  private fun splitText(text: String): List<String> {
-    val sentences = text.trim().split(Regex("(?<=[.\u0964?!])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
-    val pieces = ArrayList<String>()
+  private fun splitText(text: String): List<Piece> {
+    val sentences = text.trim().split(Regex("(?<=[.\u0964?!\u2026])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
+    val pieces = ArrayList<Piece>()
     for (sentence in sentences) {
-      if (sentence.length <= 100) { pieces.add(sentence); continue }
+      val last = sentence.last()
+      val mark = if (last == '!' || last == '?' || last == '\u2026') last else '.'
+      val body = if (mark == '.') sentence else sentence.trimEnd('!', '?', '\u2026', '.', ' ') + "."
+      if (body.length <= 100) { pieces.add(Piece(body, mark)); continue }
       var cur = StringBuilder()
-      for (part in sentence.split(Regex("(?<=,)\\s+"))) {
+      for (part in body.split(Regex("(?<=,)\\s+"))) {
         if (cur.isNotEmpty() && cur.length + part.length > 80) {
-          pieces.add(cur.toString().trim())
+          pieces.add(Piece(cur.toString().trim(), mark))
           cur = StringBuilder()
         }
         if (cur.isNotEmpty()) cur.append(' ')
         cur.append(part)
       }
-      if (cur.isNotEmpty()) pieces.add(cur.toString().trim())
+      if (cur.isNotEmpty()) pieces.add(Piece(cur.toString().trim(), mark))
     }
-    val out = ArrayList<String>()
-    var carry = ""
+    val out = ArrayList<Piece>()
+    var carry: Piece? = null
     for (piece in pieces) {
-      val joined = if (carry.isEmpty()) piece else "$carry $piece"
-      if (joined.length < 20) { carry = joined } else { out.add(joined); carry = "" }
+      val c = carry
+      val joined = if (c == null) piece else Piece("${c.text} ${piece.text}", piece.mark)
+      if (joined.text.length < 20) { carry = joined } else { out.add(joined); carry = null }
     }
-    if (carry.isNotEmpty()) {
-      if (out.isNotEmpty()) out[out.size - 1] = out[out.size - 1] + " " + carry else out.add(carry)
+    val rest = carry
+    if (rest != null) {
+      if (out.isNotEmpty()) { val l = out.removeAt(out.size - 1); out.add(Piece("${l.text} ${rest.text}", rest.mark)) } else out.add(rest)
     }
-    if (out.isEmpty()) return listOf(text)
+    if (out.isEmpty()) return listOf(Piece(text, '.'))
     // A short first piece: the first sound is ready after about 2 to 3 seconds of generating.
     val first = out[0]
-    if (first.length > 40) {
-      val cut = first.lastIndexOf(' ', 36)
-      if (cut >= 16) { out[0] = first.substring(0, cut).trim(); out.add(1, first.substring(cut + 1).trim()) }
+    if (first.text.length > 40) {
+      val cut = first.text.lastIndexOf(' ', 36)
+      if (cut >= 16) {
+        out[0] = Piece(first.text.substring(0, cut).trim(), first.mark)
+        out.add(1, Piece(first.text.substring(cut + 1).trim(), first.mark))
+      }
     }
     return out
   }
@@ -336,6 +367,7 @@ class OneFmVoiceModule : Module() {
         var bad = 0
         var genMs = 0L
         var track: AudioTrack? = null
+        var enhancer: LoudnessEnhancer? = null
         try {
           requestAudioFocus()
           val mediaVolume = try {
@@ -352,6 +384,10 @@ class OneFmVoiceModule : Module() {
                 val t = buildTrack(sr)
                 track = t
                 currentAudioTrack = t
+                // Extra loudness from Android itself (it has its own limiter). If a phone has no such effect, it is simply skipped.
+                if (ENHANCER_GAIN_MB > 0) {
+                  try { val le = LoudnessEnhancer(t.audioSessionId); le.setTargetGain(ENHANCER_GAIN_MB); le.setEnabled(true); enhancer = le } catch (e: Throwable) { }
+                }
                 startedFlag.set(true)
                 sendEvent("onStart", mapOf("id" to id))
                 try { t.setVolume(1.0f) } catch (e: Exception) { }
@@ -436,16 +472,18 @@ class OneFmVoiceModule : Module() {
             sr = currentTts.sampleRate()
             val t0 = System.currentTimeMillis()
             val chunks = splitText(text)
-            val totalChars = maxOf(1, chunks.sumOf { it.length })
+            val totalChars = maxOf(1, chunks.sumOf { it.text.length })
             var charsDone = 0
             var queuedFrames = 0L
             val gap = FloatArray(sr * 12 / 100) // 120 ms of silence between sentences
+            val midGap = FloatArray(sr * 18 / 100) // after a question
+            val longGap = FloatArray(sr * 32 / 100) // after a hesitant "..." sentence
             synchronized(genLock) {
               for ((ci, chunk) in chunks.withIndex()) {
                 if (!live()) break
                 val parts = ArrayList<FloatArray>()
-                if (ci > 0) parts.add(gap)
-                currentTts.generateWithCallback(chunk, sid = sid, speed = speed, callback = { samples ->
+                if (ci > 0) parts.add(when (chunks[ci - 1].mark) { '\u2026' -> longGap; '?' -> midGap; else -> gap })
+                currentTts.generateWithCallback(chunk.text, sid = sid, speed = speed * speedOf(chunk.mark), callback = { samples ->
                   if (!live()) {
                     0
                   } else {
@@ -460,13 +498,13 @@ class OneFmVoiceModule : Module() {
                   val piece = FloatArray(total)
                   var o = 0
                   for (c in parts) { System.arraycopy(c, 0, piece, o, c.size); o += c.size }
-                  val lv = levelAudio(piece)
+                  val lv = levelAudio(piece, loudOf(chunk.mark))
                   account(piece, lv)
                   whole.add(piece)
                   queue.offer(piece)
                   queuedFrames += piece.size
                 }
-                charsDone += chunk.length
+                charsDone += chunk.text.length
                 if (writer == null) {
                   // Start when the audio we already have lasts longer than the time still needed to make the rest.
                   val elapsed = System.currentTimeMillis() - t0
@@ -525,6 +563,7 @@ class OneFmVoiceModule : Module() {
             sendEvent("onError", mapOf("id" to id, "message" to (e.message ?: "Playback failed")))
           }
         } finally {
+          try { enhancer?.release() } catch (e: Throwable) { }
           try { track?.stop(); track?.release() } catch (e: Exception) { }
           if (currentAudioTrack === track) currentAudioTrack = null
           abandonAudioFocus()

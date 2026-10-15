@@ -1,6 +1,7 @@
 import { Lang } from '../types';
 import { ProviderSettings, chatCompletion } from './provider';
 import { cleanSpeech } from '../format';
+import { Mark, applyEmotion, countSentences, emotionTags } from './speechPolish';
 
 const SCRIPT: Record<'hi' | 'bn', string> = {
   hi: 'Devanagari script (हिन्दी)',
@@ -34,9 +35,9 @@ export function spokenSource(display: string, lang: Lang): string {
     const line = raw.trim();
     if (!line) continue;
     const m = line.match(SPEAKER_LINE);
-    let piece = line;
-    if (m && !isNarrator(m[1])) piece = lang === 'hi' ? `${m[1].trim()} ${SAYS.hi}, ${m[2]}` : `${m[1].trim()} ${SAYS[lang]}, ${m[2]}`;
-    else if (m) piece = m[2];
+    let piece = line.replace(/(\d)\s*%/g, '$1 percent');
+    if (m && !isNarrator(m[1])) piece = `${m[1].trim()} ${SAYS[lang]}, ${m[2].replace(/(\d)\s*%/g, '$1 percent')}`;
+    else if (m) piece = m[2].replace(/(\d)\s*%/g, '$1 percent');
     const core = piece.replace(/["\u201C\u201D*\s]+$/, '');
     out.push(/[.!?\u0964\u2026]$/.test(core) ? piece : `${core}.`);
   }
@@ -163,7 +164,18 @@ async function convertPart(lang: 'hi' | 'bn', seg: string, cfg: ProviderSettings
  * and the voice starts while the rest is still being converted. A part that could not be converted resolves to ''.
  */
 export function speechParts(lang: Lang, display: string, cfg: ProviderSettings, key: string): Promise<string>[] {
-  const source = cleanSpeech(spokenSource(display, lang));
+  const latin = spokenSource(display, lang);
+  const source = cleanSpeech(latin);
   if (lang === 'en') return [Promise.resolve(source)];
-  return splitForSpeech(source).map((seg) => convertPart(lang, seg, cfg, key).catch(() => ''));
+  const segs = splitForSpeech(source);
+  // One emotion mark per sentence (! ? ...). They are put back only when the sentence count still matches, otherwise the voice stays neutral.
+  const tags = emotionTags(latin);
+  const counts = segs.map(countSentences);
+  const aligned = tags.length === counts.reduce((a, b) => a + b, 0);
+  let at = 0;
+  return segs.map((seg, i) => {
+    const mine: Mark[] = aligned ? tags.slice(at, at + counts[i]) : [];
+    at += counts[i];
+    return convertPart(lang, seg, cfg, key).then((t) => (t ? applyEmotion(t, mine) : t)).catch(() => '');
+  });
 }
