@@ -12,7 +12,8 @@ import { GradientButton } from '../components/Ui';
 import { colors, radius, space } from '../theme';
 import { ChatMessage, ChatState, GENDER_LABEL, Gender, Story } from '../types';
 import { useSettings } from '../state/settings';
-import { getApiKey } from '../ai/secure';
+import { aiReady, getAiKey } from '../ai/secure';
+import { warmLocal } from '../ai/local';
 import { deleteChat, loadChat, newChat, saveChat } from '../chat/store';
 import { TurnOptions, takeTurn } from '../chat/engine';
 import { hasSpeakerLines, speechIsGood, speechParts } from '../ai/speech';
@@ -105,7 +106,10 @@ export default function Chat() {
 
   useEffect(() => { warmVoice(story.language, voiceId); }, [story.language, voiceId]);
 
-  useFocusEffect(useCallback(() => { getApiKey().then((k) => setHasKey(!!k)); }, []));
+  useFocusEffect(useCallback(() => { aiReady(s.provider).then(setHasKey); }, [s.provider.preset]));
+
+  // On-phone AI: load the model while the reader picks a role, so the first reply does not wait for it.
+  useEffect(() => { if (s.provider.preset === 'local') warmLocal(); }, [s.provider.preset]);
 
   useEffect(() => {
     if (kbOpen) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
@@ -119,12 +123,15 @@ export default function Chat() {
     const startedAt = Date.now();
     let pendingSpeak: { id: string; text?: string; parts?: Promise<string>[]; fallback?: string } | null = null;
     try {
-      const key = await getApiKey();
+      const key = await getAiKey(s.provider);
       const final = await takeTurn(story, chatRef.current, opts, s.provider, key, setBoth);
       const ai = [...final.messages].reverse().find((m) => m.role === 'ai' && m.createdAt >= startedAt);
       // The text is already on screen. If the story model's own speech_text is already clean native script,
       // it plays at once (no second network call). Only a bad speech_text is rewritten in the background.
-      if (ai?.speech && key) {
+      if (ai && s.provider.preset === 'local') {
+        // On the phone there is no second AI call for the voice: it reads the reply as it is shown.
+        pendingSpeak = { id: ai.id, text: cleanSpeech(ai.speech ?? '') || ai.text.replace(/\*/g, '') };
+      } else if (ai?.speech && key) {
         const m = ai;
         // A message with a named speaker always goes through the parts path, so the voice can say "Name bolche, ...".
         if (speechIsGood(story.language, m.text, m.speech!) && !hasSpeakerLines(m.text)) {
@@ -314,8 +321,8 @@ export default function Chat() {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: space.screen, paddingTop: space.section, paddingBottom: insets.bottom + space.section }}>
           {hasKey === false ? (
             <View style={[s2.setup, { marginBottom: space.gap }]}>
-              <Text style={s2.setupTitle}>Connect your AI provider</Text>
-              <Text style={s2.setupBody}>Stories are written by an AI model through your own key. Add a Groq or OpenRouter key in Profile to start.</Text>
+              <Text style={s2.setupTitle}>Set up your story AI</Text>
+              <Text style={s2.setupBody}>Stories are written by an AI model. In Profile, download Gemma 4 to run it on this phone, or add a Groq or OpenRouter key.</Text>
               <GradientButton title="Open Profile" onPress={() => nav.navigate('Profile')} />
             </View>
           ) : null}
@@ -341,8 +348,8 @@ export default function Chat() {
                 {busy ? <TypingDots /> : null}
                 {hasKey === false ? (
                   <View style={s2.setup}>
-                    <Text style={s2.setupTitle}>Connect your AI provider</Text>
-                    <Text style={s2.setupBody}>Stories are written by an AI model through your own key. Add a Groq or OpenRouter key in Profile to start.</Text>
+                    <Text style={s2.setupTitle}>Set up your story AI</Text>
+                    <Text style={s2.setupBody}>Stories are written by an AI model. In Profile, download Gemma 4 to run it on this phone, or add a Groq or OpenRouter key.</Text>
                     <GradientButton title="Open Profile" onPress={() => nav.navigate('Profile')} />
                   </View>
                 ) : null}
@@ -380,7 +387,7 @@ export default function Chat() {
                 <TextInput
                   ref={inputRef}
                   style={s2.input}
-                  placeholder={hasKey === false ? 'Add your AI key in Profile to start' : isYou(myRole) ? t.saySomething : t.sayAs(myName)}
+                  placeholder={hasKey === false ? 'Set up your AI in Profile to start' : isYou(myRole) ? t.saySomething : t.sayAs(myName)}
                   placeholderTextColor={colors.sub}
                   value={input}
                   onChangeText={setInput}

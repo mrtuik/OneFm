@@ -88,7 +88,7 @@ function Root() {
   // Admin only: now and then the app studies a few pages of the saved novels, quietly, at most once every few hours.
   useEffect(() => {
     if (!loaded || !user) return;
-    isAdmin(user.uid).then(async (a) => { if (a) maybeStudy(s.provider, await getApiKey()); });
+    isAdmin(user.uid).then(async (a) => { if (a && s.provider.preset !== 'local') maybeStudy(s.provider, await getApiKey()); });
   }, [loaded, user?.uid]);
 
   if (!loaded || !ready || (!!user && !s.gender && !genderChecked)) {

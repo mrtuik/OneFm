@@ -1,11 +1,14 @@
-// OpenAI-compatible chat completion client (Groq, OpenRouter, or any custom endpoint).
+// Chat completion: OpenAI-compatible clients (Groq, OpenRouter, any custom endpoint) and Gemma 4 on this phone.
+import { localCompletion } from './local';
 
-export type Preset = 'groq' | 'openrouter' | 'custom';
+export type Preset = 'local' | 'groq' | 'openrouter' | 'custom';
 export interface ProviderSettings { preset: Preset; baseUrl: string; model: string; summaryModel: string }
 
 export const PRESETS: Record<Exclude<Preset, 'custom'>, ProviderSettings> = {
   // Groq shut down llama-3.3-70b-versatile and llama-3.1-8b-instant on 16 Aug 2026 (404 model not found). gpt-oss is the replacement.
   groq: { preset: 'groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b', summaryModel: 'openai/gpt-oss-20b' },
+  // Gemma 4 runs on the phone (src/ai/local.ts). No key and no URL.
+  local: { preset: 'local', baseUrl: '', model: 'gemma-4-e2b', summaryModel: 'gemma-4-e2b' },
   openrouter: { preset: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini', summaryModel: 'openai/gpt-4o-mini' },
 };
 export const DEFAULT_PROVIDER: ProviderSettings = PRESETS.groq;
@@ -64,6 +67,13 @@ async function post(args: CallArgs, withJsonMode: boolean): Promise<Response> {
 }
 
 export async function chatCompletion(args: CallArgs): Promise<string> {
+  if (args.cfg.preset === 'local') {
+    try {
+      return await localCompletion({ messages: args.messages, json: args.json, maxTokens: args.maxTokens, temperature: args.temperature });
+    } catch (e: any) {
+      throw new ProviderError(e?.code === 'no_model' ? 'no_key' : 'server', String(e?.message ?? 'The on-phone AI failed.'));
+    }
+  }
   if (!args.apiKey) throw new ProviderError('no_key', 'Add your AI provider key in Profile first.');
   let res = await post(args, !!args.json);
   // Some endpoints do not support JSON mode. Retry once without it.

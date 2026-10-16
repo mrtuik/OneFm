@@ -27,7 +27,8 @@ const mid = () => `${Date.now().toString(36)}${(counter++).toString(36)}`;
 const REPEAT_LIMIT = 0.6;
 
 async function askModel(story: Story, chat: ChatState, finalUser: string, history: ChatMessage[], mode: TurnMode, cfg: ProviderSettings, key: string): Promise<Reply> {
-  const base = buildTurnMessages(story, chat, finalUser, history, mode);
+  const local = cfg.preset === 'local';
+  const base = buildTurnMessages(story, chat, finalUser, history, mode, { compact: local });
   // The last few AI replies. A new reply that says almost the same thing is rejected and written again.
   const recent = history.filter((m) => m.role === 'ai').slice(-2).map((m) => m.text);
   const ctx = replyContext(story, chat, history);
@@ -36,13 +37,14 @@ async function askModel(story: Story, chat: ChatState, finalUser: string, histor
   // Structured reply. If parsing fails, the reply repeats an earlier one, or it does not follow the blueprint
   // (narration + labelled dialogue, enough length, concrete), retry (up to 3 tries), then show the best we have.
   let fallback: Reply | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: 1600, temperature: attempt === 0 ? TEMP.chat : Math.min(1, TEMP.chat + 0.1) });
+  // On the phone every try costs a minute, so only two tries.
+  for (let attempt = 0; attempt < (local ? 2 : 3); attempt++) {
+    lastRaw = await chatCompletion({ cfg, apiKey: key, model: cfg.model, messages, json: true, maxTokens: local ? 700 : 1600, temperature: attempt === 0 ? TEMP.chat : Math.min(1, TEMP.chat + 0.1) });
     const parsed = parseReply(lastRaw);
     if (!parsed) continue;
     const repeated = mode !== 'begin' && recent.some((t) => similarity(parsed.display_text, t) >= REPEAT_LIMIT);
     const issue = mode === 'close' ? null : qualityIssue(parsed.display_text, ctx);
-    if (!repeated && !issue) return { ...parsed, display_text: await ensureLanguage(story.language, parsed.display_text, cfg, key) };
+    if (!repeated && !issue) return { ...parsed, display_text: local ? parsed.display_text : await ensureLanguage(story.language, parsed.display_text, cfg, key) };
     if (!repeated || !fallback) fallback = parsed; // keep a reply that is only weak over one that repeats
     const last = base[base.length - 1];
     const note = repeated
@@ -50,7 +52,7 @@ async function askModel(story: Story, chat: ChatState, finalUser: string, histor
       : `Your previous attempt was rejected because ${issue}. Write it again and follow the REPLY BLUEPRINT exactly: narration paragraphs in asterisks, dialogue lines written as Name: "words" from the story's own characters only, matching the length to the moment, at least two spoken lines, narration under half, and a different opening from earlier replies.`;
     messages = [...base.slice(0, -1), { ...last, content: `${last.content}\n\n[${note}]` }];
   }
-  if (fallback) return { ...fallback, display_text: await ensureLanguage(story.language, fallback.display_text, cfg, key) };
+  if (fallback) return { ...fallback, display_text: local ? fallback.display_text : await ensureLanguage(story.language, fallback.display_text, cfg, key) };
   const plain = lastRaw.trim();
   if (!plain) throw new ProviderError('bad_reply', 'The AI sent a reply that could not be read.');
   return { speaker: 'Narrator', display_text: plain, speech_text: cleanSpeech(plain) || plain.replace(/\*/g, ''), choices: [], episode_complete: false };

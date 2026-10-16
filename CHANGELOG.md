@@ -1,5 +1,14 @@
 # One Fm changelog
 
+## V15 (1.3.0)
+- **AI on this phone (Gemma 4 E2B).** Profile > AI brain > "On this phone". The reader downloads the model once (about 2.8 GB, from the llama.cpp team's Hugging Face copy) and then stories are written on the phone: free, no key, no limit, works offline.
+  - Download can be paused, resumed (also after the app was closed) and cancelled. The app checks free space and that the file is a real model file. Delete it from the same screen.
+  - Engine: llama.rn 0.12.7 (llama.cpp) in `src/ai/local.ts`, CPU only, 8k context, one reply at a time. The model loads in the background when a chat opens.
+  - Short prompt for the small model (`compactPrompt` in prompts.ts, about a third of the cloud prompt), last 10 messages only, replies capped at 700 tokens, no `speech_text` (the voice reads the shown text), 2 tries instead of 3, no extra English-line rewrite call.
+  - Groq, OpenRouter and Custom work as before. A saved cloud key is kept when you switch to the phone model.
+- New dependencies: `llama.rn` and `expo-device` (phone RAM warning). The build checks that llama.rn's native libraries were downloaded.
+- Tests: 17 pass (`npm run test:engine`). The engine itself (llama.rn) cannot run in these offline tests, so the first real check is on a phone.
+
 ## V14 (1.2.2)
 - Search list cards redesigned (StoryCard row, also used by the post preview): the cover sits on a rounded plate tinted with the story's own two colors; genre tags are glued to the top right corner of the card (first tag pink, a second one dark); the small chat-with icon (smile bubble from the Chats tab) is at the bottom right of every card. Plate size: `rowPlate` in theme.ts. The old play button on the other card styles is now the same chat icon.
 - Story replies (prompts.ts):

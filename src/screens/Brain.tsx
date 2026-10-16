@@ -7,7 +7,7 @@ import { Chip, GradientButton, OutlineButton } from '../components/Ui';
 import { colors, radius, space } from '../theme';
 import { LANGS, LANG_LABEL, Lang } from '../types';
 import { useSettings } from '../state/settings';
-import { getApiKey } from '../ai/secure';
+import { getAiKey } from '../ai/secure';
 import { Lesson, Source, addLesson, addSource, deleteLesson, deleteSource, fetchLessons, listSources, splitPages, studyOnce } from '../brain/brain';
 
 function Card({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
@@ -102,7 +102,7 @@ export default function Brain() {
   };
 
   const study = async () => {
-    const key = await getApiKey();
+    const key = await getAiKey(st.provider);
     if (!key) { Alert.alert('AI key needed', 'Add your AI provider key in Profile first.'); return; }
     setBusy('Studying pages...');
     try {

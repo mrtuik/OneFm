@@ -118,4 +118,42 @@ test('system prompt has contrast, micro-beat and dilemma rules', () => {
   const sys = P.masterPrompt('hi');
   assert.ok(/CONTRAST/.test(sys) && /micro-reaction/.test(sys) && /DILEMMA/.test(sys) && /hesitant/.test(sys));
 });
+test('local: compact prompt is much shorter, has no speech_text, history is trimmed', () => {
+  const full = P.buildTurnMessages(story, chatBase, 'chai khabo', [], 'turn');
+  const small = P.buildTurnMessages(story, chatBase, 'chai khabo', [], 'turn', { compact: true });
+  assert.ok(small[0].content.length < full[0].content.length / 2.2, `${small[0].content.length} vs ${full[0].content.length}`);
+  assert.ok(!/speech_text/.test(small[0].content) && /speech_text/.test(full[0].content));
+  assert.ok(/CONTRAST|do not agree/.test(small[0].content) && /hesitant/.test(small[0].content));
+  const hist = Array.from({ length: 30 }, (_, i) => (i % 2 ? ai('reply ' + i, { speech: 'x' }) : user('msg ' + i)));
+  const m = P.buildTurnMessages(story, chatBase, 'ok', hist, 'turn', { compact: true });
+  assert.ok(m.length <= 2 + 11 + 1, 'history capped at 10');
+  assert.ok(!m.some((x) => x.role === 'assistant' && /speech_text/.test(x.content)));
+});
+const LT = require(path.join(__dirname, '../src/ai/localText.ts'));
+test('local: system messages fold into the first user message', () => {
+  const out = LT.foldSystem([{ role: 'system', content: 'A' }, { role: 'system', content: 'B' }, { role: 'user', content: 'hi' }, { role: 'assistant', content: 'yo' }, { role: 'user', content: 'x' }]);
+  assert.deepStrictEqual(out.map((m) => m.role), ['user', 'assistant', 'user']);
+  assert.ok(out[0].content.startsWith('A\n\nB\n\nhi'));
+  assert.deepStrictEqual(LT.foldSystem([{ role: 'user', content: 'u' }]), [{ role: 'user', content: 'u' }]);
+});
+test('local: thinking text is removed from the reply', () => {
+  assert.strictEqual(LT.stripThinking('<think>plan it</think>{"a":1}'), '{"a":1}');
+  assert.strictEqual(LT.stripThinking('plan</think>{"a":1}'), '{"a":1}');
+  assert.strictEqual(LT.stripThinking('{"a":1}'), '{"a":1}');
+});
+test('local: prompt is trimmed to the context window, oldest turns first', () => {
+  const big = 'x'.repeat(1000);
+  const msgs = [{ role: 'system', content: 'S'.repeat(2000) }, { role: 'system', content: 'T'.repeat(500) },
+    { role: 'user', content: 'u1' + big }, { role: 'assistant', content: 'a1' + big }, { role: 'user', content: 'u2' + big }, { role: 'assistant', content: 'a2' + big }, { role: 'user', content: 'last' }];
+  const out = LT.fitMessages(msgs, 5000);
+  assert.strictEqual(out[0].content[0], 'S'); assert.strictEqual(out[out.length - 1].content, 'last');
+  assert.ok(out.reduce((n, m) => n + m.content.length, 0) <= 5000);
+  assert.ok(out.some((m) => m.content.startsWith('a2')) && !out.some((m) => m.content.startsWith('u1')));
+  assert.notStrictEqual(out[2] && out[2].role, 'assistant');
+  assert.deepStrictEqual(LT.fitMessages(msgs, 100000), msgs);
+});
+test('local: resume offset and model file check', () => {
+  assert.strictEqual(LT.resumeOffset(undefined), 0); assert.strictEqual(LT.resumeOffset(500), 0); assert.strictEqual(LT.resumeOffset(123456789), 123456789);
+  assert.ok(LT.looksLikeGguf(Buffer.from('GGUF\x03\x00').toString('base64'))); assert.ok(!LT.looksLikeGguf(Buffer.from('<htm').toString('base64')));
+});
 console.log(`\n${n} tests passed`);

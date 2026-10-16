@@ -12,6 +12,8 @@ import { TextSize, useSettings } from '../state/settings';
 import { logout, useAuthUser } from '../firebase/auth';
 import { seedStories } from '../firebase/db';
 import { PRESETS, Preset, ProviderSettings, testConnection } from '../ai/provider';
+import { LocalBrain } from '../components/LocalBrain';
+import { refreshLocalState, useLocalState } from '../ai/local';
 import { getApiKey, setApiKey } from '../ai/secure';
 import { VoiceInfo, downloadVoice, getVoiceError, subscribeVoiceError, warmVoice, removeVoice, resolveVoice, speak, stopSpeaking, subscribePlaying, voicesFor } from '../voice/engine';
 import { useVoiceStatus } from '../voice/useVoice';
@@ -23,7 +25,7 @@ const SAMPLE: Record<Lang, string> = {
   bn: 'নমস্কার, আমি আপনার গল্প পড়ে শোনাব। চলুন, এবার শুরু করা যাক।',
   hi: 'नमस्ते, मैं आपकी कहानी पढ़कर सुनाऊँगा। चलिए, अब शुरू करते हैं।',
 };
-const PRESET_LABEL: Record<Preset, string> = { groq: 'Groq', openrouter: 'OpenRouter', custom: 'Custom' };
+const PRESET_LABEL: Record<Preset, string> = { local: 'On this phone', groq: 'Groq', openrouter: 'OpenRouter', custom: 'Custom' };
 const SIZE_LABEL: Record<TextSize, string> = { small: 'Small', medium: 'Medium', large: 'Large' };
 
 type Panel = 'brain' | 'voice' | 'lang' | 'size' | 'gender' | null;
@@ -118,6 +120,9 @@ export default function Profile() {
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [testing, setTesting] = useState(false);
+  const localState = useLocalState();
+  useEffect(() => { refreshLocalState(); }, []);
+  const brainReady = st.provider.preset === 'local' ? localState.phase === 'ready' : hasKey;
 
   useEffect(() => { getApiKey().then((k) => { setKey(k); setHasKey(!!k); }); }, []);
   useEffect(() => { isAdmin(user?.uid).then(setAdmin); }, [user?.uid]);
@@ -129,12 +134,16 @@ export default function Profile() {
   const sub = user ? (username ? `@${username}` : user.email) : 'Sign in to like, save and post.';
 
   const pickPreset = (p: Preset) => setProv(p === 'custom' ? { ...prov, preset: 'custom' } : { ...PRESETS[p] });
+  const isLocal = prov.preset === 'local';
   const edit = (patch: Partial<ProviderSettings>) => setProv({ ...prov, ...patch, preset: 'custom' });
 
   const saveProvider = async () => {
     update({ provider: prov });
-    await setApiKey(key);
-    setHasKey(!!key.trim());
+    // The on-phone model has no key. Keep a saved cloud key as it is.
+    if (prov.preset !== 'local') {
+      await setApiKey(key);
+      setHasKey(!!key.trim());
+    }
   };
   const test = async () => {
     setTesting(true);
@@ -184,7 +193,7 @@ export default function Profile() {
         </Group>
 
         <Group title="Story setup">
-          <Row first node={<CardsIcon size={22} color={colors.text} />} label="AI brain" value={hasKey ? PRESET_LABEL[st.provider.preset] : 'Set your brain setup'} hot={!hasKey} onPress={() => setPanel('brain')} />
+          <Row first node={<CardsIcon size={22} color={colors.text} />} label="AI brain" value={brainReady ? PRESET_LABEL[st.provider.preset] : 'Set your brain setup'} hot={!brainReady} onPress={() => setPanel('brain')} />
           <Row icon="mic-outline" label="Voice" value={voiceName} onPress={() => setPanel('voice')} />
         </Group>
 
@@ -211,18 +220,29 @@ export default function Profile() {
 
       <Sheet form visible={panel === 'brain'} onClose={closePanel} title="AI brain">
         <View style={{ gap: 12 }}>
-          <Text style={s.hint}>Your key stays on this phone in secure storage. It is never sent to Firebase.</Text>
           <View style={s.chipRow}>
-            {(['groq', 'openrouter', 'custom'] as Preset[]).map((p) => <Chip key={p} label={PRESET_LABEL[p]} active={prov.preset === p} onPress={() => pickPreset(p)} />)}
+            {(['local', 'groq', 'openrouter', 'custom'] as Preset[]).map((p) => <Chip key={p} label={PRESET_LABEL[p]} active={prov.preset === p} onPress={() => pickPreset(p)} />)}
           </View>
-          <Field label="API key" value={key} onChangeText={setKey} secureTextEntry placeholder="Paste your API key" />
-          <Field label="Base URL" value={prov.baseUrl} onChangeText={(v) => edit({ baseUrl: v })} keyboardType="url" />
-          <Field label="Chat model" value={prov.model} onChangeText={(v) => edit({ model: v })} />
-          <Field label="Summary model (cheaper)" value={prov.summaryModel} onChangeText={(v) => edit({ summaryModel: v })} />
-          <View style={{ gap: 8, marginTop: 4 }}>
-            <GradientButton title="Save" onPress={async () => { await saveProvider(); setPanel(null); }} />
-            <OutlineButton title={testing ? 'Testing...' : 'Save and test connection'} onPress={test} />
-          </View>
+          {isLocal ? (
+            <>
+              <LocalBrain />
+              <View style={{ gap: 8, marginTop: 4 }}>
+                <GradientButton title="Use this AI" disabled={localState.phase !== 'ready'} onPress={async () => { await saveProvider(); setPanel(null); }} />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={s.hint}>Your key stays on this phone in secure storage. It is never sent to Firebase.</Text>
+              <Field label="API key" value={key} onChangeText={setKey} secureTextEntry placeholder="Paste your API key" />
+              <Field label="Base URL" value={prov.baseUrl} onChangeText={(v) => edit({ baseUrl: v })} keyboardType="url" />
+              <Field label="Chat model" value={prov.model} onChangeText={(v) => edit({ model: v })} />
+              <Field label="Summary model (cheaper)" value={prov.summaryModel} onChangeText={(v) => edit({ summaryModel: v })} />
+              <View style={{ gap: 8, marginTop: 4 }}>
+                <GradientButton title="Save" onPress={async () => { await saveProvider(); setPanel(null); }} />
+                <OutlineButton title={testing ? 'Testing...' : 'Save and test connection'} onPress={test} />
+              </View>
+            </>
+          )}
         </View>
       </Sheet>
 

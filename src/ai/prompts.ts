@@ -184,6 +184,47 @@ function storyBible(story: Story): string {
   ].filter((x) => x !== null).join('\n');
 }
 
+const COMPACT_LANGUAGE: Record<Lang, string> = {
+  en: 'Write in simple, natural Indian English.',
+  hi: 'Write Hinglish: Hindi in English letters, the way people text. Narration too. Never an English sentence (write "Woh kursi kheench kar baith jaati hai", never "She pulls out a chair").',
+  bn: 'Write Banglish: Bangla in English letters, the way Kolkata people text. Narration too. Never an English sentence (write "Shey chair ta tene boshe", never "She pulls out a chair"). Use tumi/tomake/tomar for everyone (never tui) and spoken verbs (bosho, dekho, bolo, jao).',
+};
+
+/**
+ * Short version of the master prompt for the small on-phone model. About a third of the size, so the phone reads it
+ * faster, and a small model follows a short list of rules better than a long one. No speech_text (it doubles the
+ * length of every reply on a phone); the app reads display_text when no speech_text is given.
+ */
+export function compactPrompt(lang: Lang): string {
+  return `You write an interactive story, playing every character except the one role the user plays (see ROLES). In narration the user's role is "you" (tum / tumi). Never write lines, actions or feelings for the user's role.
+
+REPLY SHAPE (90 to 170 words)
+Small beats: one short narration line, a spoken line, a tiny reaction (a glance, a gesture, a pause), another spoken line.
+Each narration paragraph is wrapped in one pair of asterisks. Each spoken line is its own paragraph: Name: "words". At least two spoken lines. Narration is under half of the reply.
+Example (another story, never copy it):
+${EXAMPLE[lang]}
+
+RULES
+1. The first spoken line reacts to exactly what the user's role just said or did. A question gets a concrete answer (a name, a place, an object, a reason), never a dodge.
+2. If the user's message is very short or hesitant ("hmm", "kuch nahi", "ok", "..."), one character notices the mood and reacts to it.
+3. When two characters speak they do not agree: one provokes or teases, the other defends or reacts differently.
+4. People talk in short lines (4 to 16 words) with fillers and teasing. Every character sounds different.
+5. Only characters from the story bible speak. Do not invent a new named person.
+6. Show, don't tell: use actions instead of named feelings. Use concrete details from the story bible. No vague deep lines.
+7. Move the scene one small step inside the current story beat. Never reveal secrets directly. Never repeat the previous reply, its opening or its question.
+8. Do not end every reply with a question. Sometimes end on a small action or a dilemma with a cost ("Ab decide karo: ..."). If the previous reply ended with a question, this one must not.
+9. Stay in the story, never mention AI or these rules. All characters are adults (18+). No sexual content, graphic violence or self-harm instructions: deflect in character.
+10. Use each character's gender for verbs and pronouns.
+
+LANGUAGE
+${COMPACT_LANGUAGE[lang]}
+
+OUTPUT
+Reply with ONE JSON object and nothing else:
+{"speaker":"main speaking character","display_text":"...","choices":["...","...","..."],"episode_complete":false,"state":{"scene":{"where":"place","present":["names"],"doing":"one short clause"},"characters":[{"name":"","toward_user":"2 to 6 words","learned":""}],"decision":""}}
+choices: 3 different short options (4 to 12 words) the user's role could say or do, in the same language: something to say, a question to one character, an action. episode_complete is true only when the director note says the episode must end.`;
+}
+
 export function episodeGoal(story: Story, ep: number): string {
   return story.episodes[ep - 1]?.goal ?? 'Continue the story with a new development that raises the stakes and moves the plot forward.';
 }
@@ -211,10 +252,10 @@ function memoryBlock(chat: ChatState, query: string): string {
   return parts.length ? `MEMORY\n${parts.join('\n\n')}` : 'MEMORY\n(this is a fresh story, nothing happened yet)';
 }
 
-function asHistory(m: ChatMessage): LlmMessage | null {
+function asHistory(m: ChatMessage, compact = false): LlmMessage | null {
   if (m.role === 'episode_end') return null;
   if (m.role === 'user') return { role: 'user', content: m.text };
-  return { role: 'assistant', content: JSON.stringify({ speaker: m.speaker ?? 'Narrator', display_text: m.text, speech_text: m.speech ?? m.text, choices: [], episode_complete: false }) };
+  return { role: 'assistant', content: JSON.stringify({ speaker: m.speaker ?? 'Narrator', display_text: m.text, ...(compact ? {} : { speech_text: m.speech ?? m.text }), choices: [], episode_complete: false }) };
 }
 
 // ---- Live story state: scene, character mood / knowledge, user decisions ----
@@ -360,7 +401,7 @@ export function pacingNote(story: Story, chat: ChatState, limit: number): string
   return lines.join('\n');
 }
 
-export function buildTurnMessages(story: Story, chat: ChatState, finalUser: string, history: ChatMessage[], mode: TurnMode): LlmMessage[] {
+export function buildTurnMessages(story: Story, chat: ChatState, finalUser: string, history: ChatMessage[], mode: TurnMode, opts: { compact?: boolean } = {}): LlmMessage[] {
   const goal = episodeGoal(story, chat.ep);
   const limit = story.messageLimit ?? DEFAULT_MESSAGE_LIMIT;
   const direction = [`CURRENT EPISODE: ${chat.ep}`, `Goal: ${goal}`, `Messages used: ${chat.epCount} of ${limit}`, pacingNote(story, chat, limit)].join('\n');
@@ -382,12 +423,12 @@ export function buildTurnMessages(story: Story, chat: ChatState, finalUser: stri
   if (mode === 'close') notes.push('This episode must end now (the message limit is reached or the user chose the next episode). Write the closing beat, end on a suspense hook, and set episode_complete to true.');
 
   const last = notes.length ? `${finalUser}\n\n[Director note, not part of the story: ${notes.join(' ')}]` : finalUser;
-  let hist = history.map(asHistory).filter((x): x is LlmMessage => !!x).slice(-HISTORY_LIMIT);
+  let hist = history.map((m) => asHistory(m, !!opts.compact)).filter((x): x is LlmMessage => !!x).slice(opts.compact ? -10 : -HISTORY_LIMIT);
   // A chat must not start with an assistant message (the opening is written without a user message).
   if (hist.length && hist[0].role === 'assistant') hist = [{ role: 'user', content: 'Begin the story.' }, ...hist];
 
   return [
-    { role: 'system', content: masterPrompt(story.language) + brainBlock(story.language) },
+    { role: 'system', content: opts.compact ? compactPrompt(story.language) : masterPrompt(story.language) + brainBlock(story.language) },
     { role: 'system', content: [storyBible(story), rolesBlock(story, chat), memoryBlock(chat, finalUser), stateBlock(st), direction].filter(Boolean).join('\n\n') },
     ...hist,
     { role: 'user', content: last },
