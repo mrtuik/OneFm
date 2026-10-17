@@ -17,6 +17,7 @@ import { warmLocal } from '../ai/local';
 import { deleteChat, loadChat, newChat, saveChat } from '../chat/store';
 import { TurnOptions, takeTurn } from '../chat/engine';
 import { hasSpeakerLines, speechIsGood, speechParts } from '../ai/speech';
+import { displayChoices } from '../ai/choices';
 import { YOU, isYou, playableRoles } from '../chat/roles';
 import { cleanSpeech } from '../format';
 import { UiText, uiText } from '../chat/uiText';
@@ -294,7 +295,7 @@ export default function Chat() {
     );
   };
 
-  const choices = !busy && last?.role === 'ai' ? last.choices ?? [] : [];
+  const choices = !busy && last?.role === 'ai' ? displayChoices(story.language, last.choices ?? []) : [];
   const myRole = chat?.userRole;
   const myName = roleLabel(myRole, t);
   const initial = myName.charAt(0).toUpperCase();

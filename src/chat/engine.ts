@@ -2,8 +2,8 @@ import { ChatMessage, ChatState, Story } from '../types';
 import { ProviderError, ProviderSettings, chatCompletion } from '../ai/provider';
 import { DEFAULT_MESSAGE_LIMIT, MIN_EPISODE_MESSAGES, Reply, TEMP, TurnMode, buildTurnMessages, currentState, mergeState, parseReply, qualityIssue, replyContext, similarity } from '../ai/prompts';
 import { withRoleInfo } from './roles';
-import { runMemoryPipeline } from '../ai/memory';
-import { ensureLanguage } from '../ai/language';
+import { runMemoryPipeline, updateEpisodeSummary } from '../ai/memory';
+import { ensureLanguage, fixChoices } from '../ai/language';
 import { saveChat } from './store';
 import { cleanSpeech } from '../format';
 import { uiText } from './uiText';
@@ -112,6 +112,8 @@ export async function takeTurn(storyIn: Story, start: ChatState, opts: TurnOptio
   }
 
   const reply = await askModel(story, chat, finalUser, history, mode, cfg, key);
+  // The chips must be in the story's own language (no Hinglish chips in a Banglish story).
+  reply.choices = await fixChoices(story.language, reply.choices, cfg, key);
 
   // Story state after this reply. It lives on the reply itself, so regenerating (which drops the reply) never duplicates events.
   const prevAi = [...history].reverse().find((m) => m.role === 'ai');
@@ -125,7 +127,13 @@ export async function takeTurn(storyIn: Story, start: ChatState, opts: TurnOptio
   push({ ...chat, messages: [...chat.messages, ai], epCount });
 
   const finished = mode === 'close' || (reply.episode_complete && epCount >= MIN_EPISODE_MESSAGES);
-  if (!finished) return chat;
+  if (!finished) {
+    // Older messages of this episode fall out of the short chat history. Fold them into the running summary
+    // (every few messages) so the story keeps its context all the way to the end of a long episode.
+    const withSummary = await updateEpisodeSummary(cfg, key, story, chat, cfg.preset === 'local');
+    if (withSummary !== chat) push(withSummary);
+    return chat;
+  }
 
   // Episode over: write the end card first so the user sees it, then update memory in the background of this call.
   const finishedEp = chat.ep;
@@ -133,6 +141,6 @@ export async function takeTurn(storyIn: Story, start: ChatState, opts: TurnOptio
   push({ ...chat, messages: [...chat.messages, endCard] });
 
   const withMemory = await runMemoryPipeline(cfg, key, story, chat, finishedEp);
-  push({ ...withMemory, ep: finishedEp + 1, epCount: 0 });
+  push({ ...withMemory, ep: finishedEp + 1, epCount: 0, epSummary: '', epSummaryAt: 0, epSummaryEp: finishedEp + 1 });
   return chat;
 }

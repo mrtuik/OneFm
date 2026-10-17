@@ -12,7 +12,7 @@ require.extensions['.ts'] = (m, file) => {
 };
 const origLoad = Module._load;
 Module._load = function (req, ...rest) {
-  if (/brain\/brain|data\/samples|firebase|async-storage|ai\/secure/.test(req)) return { brainBlock: () => '', SAMPLE_STORIES: [] };
+  if (/brain\/brain|data\/samples|firebase|async-storage|ai\/secure|^\.\/local$/.test(req)) return { brainBlock: () => '', SAMPLE_STORIES: [] };
   return origLoad.call(this, req, ...rest);
 };
 const P = require(path.join(__dirname, '../src/ai/prompts.ts'));
@@ -156,4 +156,70 @@ test('local: resume offset and model file check', () => {
   assert.strictEqual(LT.resumeOffset(undefined), 0); assert.strictEqual(LT.resumeOffset(500), 0); assert.strictEqual(LT.resumeOffset(123456789), 123456789);
   assert.ok(LT.looksLikeGguf(Buffer.from('GGUF\x03\x00').toString('base64'))); assert.ok(!LT.looksLikeGguf(Buffer.from('<htm').toString('base64')));
 });
-console.log(`\n${n} tests passed`);
+
+// ---- V3.1: choice chips in the story's own language, running summary of the current episode ----
+const C = require(path.join(__dirname, '../src/ai/choices.ts'));
+const M = require(path.join(__dirname, '../src/ai/memory.ts'));
+const LG = require(path.join(__dirname, '../src/ai/language.ts'));
+
+test('choices: Hinglish chips in a Banglish story are found (the bug from the screenshot)', () => {
+  assert.ok(C.isWrongLanguageChoice('bn', 'Main call ka reason bataunga'));
+  assert.ok(C.isWrongLanguageChoice('bn', 'Inspector Sen se kuch poochunga'));
+  assert.ok(C.isWrongLanguageChoice('bn', 'Main pehle uske papa se baat karunga'));
+});
+test('choices: good Banglish and Hinglish chips are kept', () => {
+  assert.ok(!C.isWrongLanguageChoice('bn', 'Ami age okhaner baba er sathe kotha bolbo'));
+  assert.ok(!C.isWrongLanguageChoice('bn', 'Inspector Sen ke jiggesh korbo, call ta kotha theke ashchhe'));
+  assert.ok(!C.isWrongLanguageChoice('bn', 'Main gate er dike jai'));
+  assert.ok(!C.isWrongLanguageChoice('hi', 'Main pehle uske papa se baat karunga'));
+  assert.ok(C.isWrongLanguageChoice('hi', 'Ami jiggesh korbo kotha theke call ashche'));
+  assert.ok(!C.isWrongLanguageChoice('en', 'Main call ka reason bataunga'));
+});
+test('choices: wrong chips are replaced, good ones stay, always at most 3', () => {
+  const mix = ['Main call ka reason bataunga', 'Ami phone ta kete dilam', 'Inspector Sen se kuch poochunga'];
+  const { good, bad } = C.splitChoices('bn', mix);
+  assert.deepStrictEqual(good, ['Ami phone ta kete dilam']);
+  assert.strictEqual(bad.length, 2);
+  const shown = C.displayChoices('bn', mix);
+  assert.strictEqual(shown.length, 3);
+  assert.ok(shown[0] === 'Ami phone ta kete dilam' && shown.every((c) => !C.isWrongLanguageChoice('bn', c)));
+  assert.deepStrictEqual(C.displayChoices('bn', ['Ami ekta proshno korbo']), ['Ami ekta proshno korbo']);
+  assert.deepStrictEqual(C.displayChoices('bn', []), []);
+});
+const pending = [];
+test('choices: on the phone wrong chips are dropped without a second AI call', () => {
+  pending.push((async () => {
+    const out = await LG.fixChoices('bn', ['Main call ka reason bataunga', 'Ami phone ta kete dilam'], { preset: 'local' }, 'local');
+    assert.ok(out.length >= 2 && out[0] === 'Ami phone ta kete dilam' && out.every((c) => !C.isWrongLanguageChoice('bn', c)));
+    const same = await LG.fixChoices('bn', ['Ami ekta proshno korbo'], { preset: 'local' }, 'local');
+    assert.deepStrictEqual(same, ['Ami ekta proshno korbo']);
+  })());
+});
+test('prompt: the Banglish prompts never teach Hinglish chips', () => {
+  const bnMaster = P.masterPrompt('bn');
+  assert.ok(!bnMaster.includes('Main pehle uske papa'));
+  assert.ok(/ami/.test(bnMaster) && /NEVER Hinglish/.test(bnMaster));
+  assert.ok(!P.compactPrompt('bn').includes('Main pehle'));
+  assert.ok(/Main pehle uske papa/.test(P.masterPrompt('hi')));
+});
+test('memory: running summary of this episode goes into the prompt, a summary of another episode does not', () => {
+  const bn = { ...story, language: 'bn' };
+  const base = { ...chatBase, ep: 2, epCount: 20, messages: [], epSummaryAt: 8 };
+  const withSum = P.buildTurnMessages(bn, { ...base, epSummary: 'Ojana found the unknown number belongs to the old school.', epSummaryEp: 2 }, 'hmm', [], 'turn');
+  const sys = withSum.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
+  assert.ok(sys.includes('Earlier in THIS episode') && sys.includes('unknown number belongs to the old school'));
+  assert.ok(sys.includes('How to use MEMORY'));
+  const old = P.buildTurnMessages(bn, { ...base, epSummary: 'stale text', epSummaryEp: 1 }, 'hmm', [], 'turn');
+  assert.ok(!old.map((m) => m.content).join('\n').includes('stale text'));
+});
+test('memory: only messages older than the chat window are waiting for a summary', () => {
+  const msgs = (n, ep = 1) => Array.from({ length: n }, (_, i) => ({ id: 'm' + i, role: i % 2 ? 'ai' : 'user', text: 't' + i, ep }));
+  assert.strictEqual(M.pendingForSummary({ ...chatBase, ep: 1, messages: msgs(10) }, true), 0);
+  assert.strictEqual(M.pendingForSummary({ ...chatBase, ep: 1, messages: msgs(16) }, true), 6);
+  assert.strictEqual(M.pendingForSummary({ ...chatBase, ep: 1, messages: msgs(16) }, false), 0);
+  assert.strictEqual(M.pendingForSummary({ ...chatBase, ep: 1, messages: msgs(30), epSummaryEp: 1, epSummaryAt: 10 }, false), 0);
+  assert.strictEqual(M.pendingForSummary({ ...chatBase, ep: 1, messages: msgs(36), epSummaryEp: 1, epSummaryAt: 10 }, false), 6);
+  assert.strictEqual(M.pendingForSummary({ ...chatBase, ep: 2, messages: [...msgs(30, 1), ...msgs(8, 2)] }, true), 0);
+});
+
+Promise.all(pending).then(() => console.log(`\n${n} tests passed`), (e) => { console.error(e); process.exit(1); });

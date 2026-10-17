@@ -11,8 +11,19 @@ const HISTORY_LIMIT = 20;
 
 const LANG_NOTE: Record<Lang, string> = {
   en: 'Write narration, dialogue and choices in simple English.',
-  hi: 'Write narration, dialogue and choices in Hinglish (Hindi in English letters). Not a single English sentence, not even in narration or action lines (write "Woh kursi kheench kar baith jaati hai", never "She pulls out a chair").',
-  bn: 'Write narration, dialogue and choices in Banglish (Bangla in English letters). Not a single English sentence, not even in narration or action lines (write "Shey chair ta tene boshe", never "She pulls out a chair").',
+  hi: 'Write narration, dialogue and choices in Hinglish (Hindi in English letters). Not a single English sentence, not even in narration or action lines (write "Woh kursi kheench kar baith jaati hai", never "She pulls out a chair"). The choices are first person Hinglish (main, mujhe), never Bangla words.',
+  bn: 'Write narration, dialogue and choices in Banglish (Bangla in English letters). Not a single English sentence, not even in narration or action lines (write "Shey chair ta tene boshe", never "She pulls out a chair"). The choices are first person Banglish (ami, amar, amake), NEVER Hinglish (main, mujhe, hai, nahi, kya, karunga). If the user\'s own message or an earlier reply was in Hinglish or English, still answer and write the choices in Banglish.',
+};
+
+/**
+ * Rules for the tappable choice chips, per story language. The chips are what the reader says or does, so they are
+ * written in first person in the SAME language as the story. A Banglish story never gets Hinglish chips (main / mujhe /
+ * hai / karunga) and a Hinglish story never gets Banglish chips (ami / amar / korbo).
+ */
+export const CHOICE_RULE: Record<Lang, string> = {
+  en: 'choices: give 3 DIFFERENT options that lead to different consequences and relate to what just happened: (1) something the user\'s role can SAY in their own voice (first person, \"I\"), (2) a short question to one specific character, (3) an action. Each 4 to 12 words, in simple English, never all starting with the same word, never small talk or trivia, never \"I will say nothing\" filler. Example: \"I will talk to her father first\". Use [] when not needed.',
+  hi: 'choices: give 3 DIFFERENT options that lead to different consequences and relate to what just happened: (1) something the user\'s role can SAY in their own voice (first person: \"main\", \"mujhe\"), (2) a short question to one specific character, (3) an action. Each 4 to 12 words, in Hinglish (Hindi in English letters) only, never Bangla words (no ami, amar, korbo, bolbo) and never English sentences, never all starting with the same word, never small talk or trivia, never \"I will say nothing\" filler. Example: \"Main pehle uske papa se baat karunga\". Use [] when not needed.',
+  bn: 'choices: give 3 DIFFERENT options that lead to different consequences and relate to what just happened: (1) something the user\'s role can SAY in their own voice (first person: \"ami\", \"amar\", \"amake\"), (2) a short question to one specific character (tumi / apni level as the story uses), (3) an action. Each 4 to 12 words, in Banglish (Bangla in English letters) only. NEVER Hinglish: never write main, mujhe, mera, hai, nahi, kya, kuch, ka, ko, karunga, batauga, poochunga or any Hindi word, and never English sentences. Never all starting with the same word, never small talk or trivia, never \"I will say nothing\" filler. Examples: \"Ami age okhaner baba er sathe kotha bolbo\", \"Inspector Sen ke jiggesh korbo, call ta kotha theke ashchhe\", \"Ami phone ta kete dilam\". Use [] when not needed.',
 };
 
 const LANGUAGE_RULE: Record<Lang, string> = {
@@ -139,7 +150,7 @@ Reply with ONE JSON object and nothing else, no markdown fences:
 {"speaker":"main speaking character, or Narrator","display_text":"...","speech_text":"...","choices":["short option","short option"],"episode_complete":false,"state":{"scene":{"where":"place","present":["names in the scene"],"doing":"what is happening right now, one short clause"},"characters":[{"name":"","toward_user":"how this character feels about the user's role now, 2 to 6 words","learned":"a new fact this character just learned, or empty"}],"decision":""}}
 - state: always give scene (where, who is present, what is going on). In characters list only the ones (max 3) whose feeling toward the user's role changed or who learned something new in this reply. decision: fill it ONLY when the user's last message committed to a significant story choice (a short sentence), otherwise leave it empty.
 - speech_text: the same content as display_text in the same order, without asterisks, quotation marks, speaker labels (no "Name:"), brackets, emoji or any symbol, written so it sounds natural when read aloud. Only plain words with commas and full stops.
-- choices: give 3 DIFFERENT options that lead to different consequences and relate to what just happened: (1) something the user's role can SAY in their own voice (first person, "main", "mujhe"), (2) a short question to one specific character, (3) an action. Each 4 to 12 words, in the SAME language and script as display_text (Hinglish or Banglish, never English unless the story language is English), never all starting with the same word, never small talk or trivia, never "I will say nothing" filler. Example: "Main pehle uske papa se baat karunga". Use [] when not needed.`;
+- ${CHOICE_RULE[lang]}`;
 }
 
 function characterCard(c: Character): string {
@@ -184,6 +195,12 @@ function storyBible(story: Story): string {
   ].filter((x) => x !== null).join('\n');
 }
 
+const COMPACT_CHOICES: Record<Lang, string> = {
+  en: 'choices: 3 different short options (4 to 12 words) the user\'s role could say or do, in simple English: something to say (\"I ...\"), a question to one character, an action.',
+  hi: 'choices: 3 different short options (4 to 12 words) the user\'s role could say or do, in Hinglish only (\"Main pehle uske papa se baat karunga\"), never Bangla words: something to say, a question to one character, an action.',
+  bn: 'choices: 3 different short options (4 to 12 words) the user\'s role could say or do, in Banglish only (\"Ami age okhaner baba er sathe kotha bolbo\"), first person ami / amar / amake. NEVER Hinglish (no main, mujhe, hai, nahi, kya, ka, karunga, batauga): something to say, a question to one character, an action.',
+};
+
 const COMPACT_LANGUAGE: Record<Lang, string> = {
   en: 'Write in simple, natural Indian English.',
   hi: 'Write Hinglish: Hindi in English letters, the way people text. Narration too. Never an English sentence (write "Woh kursi kheench kar baith jaati hai", never "She pulls out a chair").',
@@ -222,7 +239,7 @@ ${COMPACT_LANGUAGE[lang]}
 OUTPUT
 Reply with ONE JSON object and nothing else:
 {"speaker":"main speaking character","display_text":"...","choices":["...","...","..."],"episode_complete":false,"state":{"scene":{"where":"place","present":["names"],"doing":"one short clause"},"characters":[{"name":"","toward_user":"2 to 6 words","learned":""}],"decision":""}}
-choices: 3 different short options (4 to 12 words) the user's role could say or do, in the same language: something to say, a question to one character, an action. episode_complete is true only when the director note says the episode must end.`;
+${COMPACT_CHOICES[lang]} episode_complete is true only when the director note says the episode must end.`;
 }
 
 export function episodeGoal(story: Story, ep: number): string {
@@ -247,9 +264,11 @@ function memoryBlock(chat: ChatState, query: string): string {
   if (chat.episodeSummaries.length) {
     parts.push(`Recent episodes:\n${chat.episodeSummaries.map((s) => `Ep ${s.ep}: ${s.text}`).join('\n')}`);
   }
+  if (chat.epSummary && chat.epSummaryEp === chat.ep) parts.push(`Earlier in THIS episode (summary of the messages older than the chat below):\n${chat.epSummary}`);
   const facts = pickFacts(chat.facts, query, 8);
   if (facts.length) parts.push(`Key facts to stay consistent with:\n${facts.map((f) => `- ${f.text}`).join('\n')}`);
-  return parts.length ? `MEMORY\n${parts.join('\n\n')}` : 'MEMORY\n(this is a fresh story, nothing happened yet)';
+  if (!parts.length) return 'MEMORY\n(this is a fresh story, nothing happened yet)';
+  return `MEMORY\n${parts.join('\n\n')}\n\nHow to use MEMORY: it is what already happened, so treat it as true. Never contradict it, never replay it as if it is new, and never ask something a character already knows. Call back to an earlier clue, promise or decision when it fits the moment.`;
 }
 
 function asHistory(m: ChatMessage, compact = false): LlmMessage | null {
@@ -600,6 +619,19 @@ Output plain text only.
 
 Episode ${ep} transcript:
 ${transcript}`;
+
+export const EP_SUMMARY_SYSTEM = 'You keep the running memory of a story that is being told live. Reply with plain text only.';
+/**
+ * Running summary of the part of the current episode that is no longer in the short chat history.
+ * Written in English so the prompt stays short and clear for any model; names and places stay as in the story.
+ */
+export const epSummaryPrompt = (title: string, ep: number, previous: string, transcript: string) =>
+  `Story: ${title}\nEpisode ${ep} is still running. Update the running summary of what happened so far in this episode.
+Keep it under 140 words, plain text, no dialogue quotes. Be factual and specific (names, places, objects).
+Always keep: where the scene is and who is there, what each main character wants or feels toward the user's role now, what the user's role said or decided, clues found, promises and secrets, and the open question the scene is waiting on.
+Drop small talk and repeated details. Keep everything from the previous summary that still matters.
+
+${previous ? `Previous running summary:\n${previous}\n\n` : ''}New messages to add:\n${transcript}`;
 
 export const FACTS_SYSTEM = 'You extract story facts. Reply with JSON only, no markdown.';
 export const factsPrompt = (title: string, ep: number, transcript: string, known: string[]) =>

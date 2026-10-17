@@ -106,6 +106,12 @@ export interface ChatState {
   /** Summaries of finished episodes that are not yet merged into the rolling summary. */
   episodeSummaries: EpisodeSummary[];
   rollingSummary: string;
+  /** Summary of the older part of the CURRENT episode (messages that fell out of the short chat history). */
+  epSummary?: string;
+  /** How many messages of the current episode the summary above already covers. */
+  epSummaryAt?: number;
+  /** Episode number the summary belongs to. A summary from another episode is ignored. */
+  epSummaryEp?: number;
   facts: Fact[];
   /** Old field: who the reader was talking to (V5 and earlier). Not used for new chats. */
   character?: string;

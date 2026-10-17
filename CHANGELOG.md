@@ -1,5 +1,18 @@
 # One Fm changelog
 
+## V3.1 (3.1.0)
+- **Choice chips are now in the story's own language.** In a Banglish story the chips under the reply were sometimes Hinglish ("Main call ka reason bataunga"). Cause: the prompt's example chip was Hinglish for every story. Fixed in three places:
+  - Per language rules and examples (`CHOICE_RULE`, `COMPACT_CHOICES` in prompts.ts): Banglish chips are first person `ami / amar / amake` with Banglish examples, Hinglish chips use `main / mujhe`. The director note also says: if the user's own message or an earlier reply was in another language, still answer in the story's language.
+  - Safety net (`src/ai/choices.ts`, `fixChoices` in language.ts): after every reply the chips are checked. Wrong language chips are rewritten in one small call (cloud) or replaced (on-phone AI, no extra call). Good chips are never touched.
+  - Old chats: chips already saved on the last reply are cleaned when shown (`displayChoices` in Chat.tsx).
+- **Story memory is used properly as prompt context.** Before, only the last 20 messages (10 on the phone) were sent and the summary was written only when an episode ended, so a long episode forgot its own beginning.
+  - New running summary of the current episode (`updateEpisodeSummary` in memory.ts). Messages that fall out of the chat window are folded into a short summary every 6 messages and sent in the MEMORY block of every reply ("Earlier in THIS episode"). Saved in the chat as `epSummary`, `epSummaryAt`, `epSummaryEp`; reset when the episode ends.
+  - The end-of-episode summary now starts from that running summary, so the start of a long episode is not cut off (the transcript was cut to its last 9000 characters).
+  - MEMORY now ends with a rule: treat it as true, never contradict or replay it, never ask what a character already knows, call back to earlier clues and decisions.
+  - Cost: one small extra AI call about every 6 messages once an episode is longer than the chat window (not in short episodes).
+- Tests: 24 pass (`npm run test:engine`). New: Hinglish chips found in a Banglish story, good chips kept, chips replaced, prompts never teach Hinglish chips, running summary reaches the prompt, summary of another episode is ignored.
+- Version is now 3.1.0 (`package.json`, `app.json`). The build number still comes from the GitHub run number.
+
 ## V15 (1.3.0)
 - **AI on this phone (Gemma 4 E2B).** Profile > AI brain > "On this phone". The reader downloads the model once (about 2.8 GB, from the llama.cpp team's Hugging Face copy) and then stories are written on the phone: free, no key, no limit, works offline.
   - Download can be paused, resumed (also after the app was closed) and cancelled. The app checks free space and that the file is a real model file. Delete it from the same screen.
